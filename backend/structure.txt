@@ -1,0 +1,37 @@
+
+├── app.js
+├── Config
+│   └── database.js
+├── Controllers
+│   ├── guestController.js
+│   ├── paymentController.js
+│   ├── reservationController.js
+│   ├── roomController.js
+│   └── userController.js
+├── db.sql
+├── Middleware
+│   ├── auth.js
+│   └── errorHandler.js
+├── Models
+│   ├── activityLog.js
+│   ├── guest.js
+│   ├── payment.js
+│   ├── reservation.js
+│   ├── room.js
+│   └── user.js
+├── package.json
+├── package-lock.json
+├── Routes
+│   ├── activityRoutes.js
+│   ├── foodItemRoutes.js
+│   ├── foodOrderRoutes.js
+│   ├── guestRoutes.js
+│   ├── paymentRoutes.js
+│   ├── reservationRoutes.js
+│   ├── roomRoutes.js
+│   ├── taskRoutes.js
+│   └── userRoutes.js
+└── Utils
+    ├── generateId.js
+    └── response.js
+
