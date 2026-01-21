@@ -9,6 +9,6 @@ yarn-error.log*
 
 # OS
 .DS_Store
-db.js 
+db.sql
 structure.txt
 

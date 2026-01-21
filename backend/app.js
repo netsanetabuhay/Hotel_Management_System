@@ -11,7 +11,7 @@ const mysql = require('mysql2');
 // const authRoutes = require('./Routes/authRoutes');
 const userRoutes = require('./Routes/userRoutes');
 // const guestRoutes = require('./Routes/guestRoutes');
-// const roomRoutes = require('./Routes/roomRoutes');
+const roomRoutes = require('./Routes/roomRoutes');
 // const reservationRoutes = require('./Routes/reservationRoutes');
 // const foodItemRoutes = require('./Routes/foodItemRoutes');
 // const foodOrderRoutes = require('./Routes/foodOrderRoutes');
@@ -36,7 +36,7 @@ dotenv.config();
 // app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 // app.use('/api/guests', guestRoutes);
-// app.use('/api/rooms', roomRoutes);
+app.use('/api/rooms', roomRoutes);
 // app.use('/api/reservations', reservationRoutes);
 // app.use('/api/food-items', foodItemRoutes);
 // app.use('/api/food-orders', foodOrderRoutes);
@@ -76,4 +76,3 @@ app.listen(PORT, () => {
 
 // // 8. EXPORT APP
 module.exports = app;
-console.log("Hello World");
