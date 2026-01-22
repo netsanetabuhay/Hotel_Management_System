@@ -181,17 +181,34 @@ const deleteRoom = async (room_id) => {
 
 // READ - Get available rooms only (DIFFERENT NAME: findAvailableRooms)
 const findAvailableRooms = async () => {
-  const sql = "SELECT * FROM rooms WHERE status = ?";
-  
+  const query = `
+    SELECT *
+    FROM rooms
+    WHERE status = ?
+  `;
+
+  const status = 'available';
+
   try {
-    const [rows] = await pool.query(sql, ['available']);
-    console.log(rows);
-    console.log("Above are the available rooms");
-    return rows;
+    const [rooms] = await pool.query(query, [status]);
+    return rooms;
   } catch (error) {
-    throw error;
+    console.error('Error fetching available rooms:', error.message);
+    throw new Error('Database error while fetching available rooms');
   }
 };
+// const findAvailableRooms = async () => {
+//   const sql = "SELECT * FROM rooms WHERE status = ?";
+  
+//   try {
+//     const [rows] = await pool.query(sql, ['available']);
+//     console.log(rows);
+//     console.log("Above are the available rooms");
+//     return rows;
+//   } catch (error) {
+//     throw error;
+//   }
+// };
 
 // READ - Get rooms by specific status
 const findRoomsByStatus = async (status) => {

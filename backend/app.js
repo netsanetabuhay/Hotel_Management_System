@@ -4,7 +4,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const bycrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-// const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 
 // // 2. ROUTE IMPORTS

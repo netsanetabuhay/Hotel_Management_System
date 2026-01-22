@@ -190,29 +190,54 @@ const deleteRoom = async (req, res) => {
 };
 
 // Get available rooms
+// GET available rooms
 const getAvailableRooms = async (req, res) => {
   try {
     const availableRooms = await findAvailableRooms();
-    console.log(availableRooms);
 
-    
+    // Case 1: No rooms
     if (availableRooms.length === 0) {
       return sendSuccess(res, 'No available rooms found', {
         count: 0,
         rooms: []
       });
     }
-    
-    return sendSuccess(res, 'Available rooms retrieved successfully', {
+
+    // ✅ Case 2: Rooms found (THIS WAS MISSING)
+    return sendSuccess(res, 'Available rooms fetched successfully', {
       count: availableRooms.length,
       rooms: availableRooms
     });
-    
+
   } catch (error) {
-    console.error('Get available rooms error:', error);
-    return sendError(res, 'Failed to retrieve available rooms: ' + error.message, 500);
+    console.error(error);
+    return sendError(res, 'Failed to fetch available rooms');
   }
 };
+
+// const getAvailableRooms = async (req, res) => {
+//   try {
+//     const availableRooms = await findAvailableRooms();
+//     console.log(availableRooms);
+
+    
+//     if (availableRooms.length === 0) {
+//       return sendSuccess(res, 'No available rooms found', {
+//         count: 0,
+//         rooms: []
+//       });
+//     }
+    
+//     return sendSuccess(res, 'Available rooms retrieved successfully', {
+//       count: availableRooms.length,
+//       rooms: availableRooms
+//     });
+    
+//   } catch (error) {
+//     console.error('Get available rooms error:', error);
+//     return sendError(res, 'Failed to retrieve available rooms: ' + error.message, 500);
+//   }
+// };
 
 // Get room statistics
 const getRoomStatistics = async (req, res) => {
