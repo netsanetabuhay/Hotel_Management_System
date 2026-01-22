@@ -17,7 +17,6 @@ router.post('/login', loginUser);
 
 // Protected routes (require authentication)
 router.use(authenticate);
-router.use(authorize);
 
 // Get all users (admin only)
 router.get('/', authorize(['admin']), getAllUsers);
