@@ -27,7 +27,8 @@ router.get('/', getAllRooms);
 router.get('/search', searchRooms);
 router.get('/:id', getRoomById);
 router.get('/number/:room_number', getRoomByNumber);
-router.get('/available', getAvailableRooms);
+router.get('/available', getAvailableRooms);  //  getAvailableRooms,
+
 
 // Protected routes - Authentication and authorization required
 router.get('/stats', authenticate, authorize(['admin', 'manager']), getRoomStatistics);

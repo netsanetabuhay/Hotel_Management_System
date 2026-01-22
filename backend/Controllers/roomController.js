@@ -1,4 +1,18 @@
-const Room = require('../Models/room');
+// Literal imports from Models
+const {
+  createRoom: createRoomModel,
+  findAllRooms,
+  findRoomById,
+  findRoomByNumber,
+  updateRoom: updateRoomModel,
+  deleteRoom: deleteRoomModel,
+  findAvailableRooms,
+  findRoomsByStatus,
+  getRoomStats,
+  updateRoomStatus: updateRoomStatusModel,
+  checkRoomNumberExists
+} = require('../Models/room');
+
 const { generateId } = require('../Utils/generateId');
 const { sendSuccess, sendError } = require('../Utils/response');
 
@@ -7,21 +21,17 @@ const createRoom = async (req, res) => {
   try {
     const { room_number, room_type, price, status } = req.body;
     
-    // Validation
     if (!room_number || !room_type || !price) {
       return sendError(res, 'Room number, type and price are required', 400);
     }
     
-    // Check if room number already exists
-    const existingRoom = await Room.findByNumber(room_number);
+    const existingRoom = await findRoomByNumber(room_number);
     if (existingRoom) {
       return sendError(res, 'Room number already exists', 409);
     }
     
-    // Generate room ID
     const room_id = generateId('RM');
     
-    // Create room data object
     const roomData = {
       room_id,
       room_number,
@@ -30,8 +40,7 @@ const createRoom = async (req, res) => {
       status: status || 'available'
     };
     
-    // Save to database
-    const result = await Room.create(roomData);
+    const result = await createRoomModel(roomData);
     
     return sendSuccess(res, 'Room created successfully', {
       room_id,
@@ -50,7 +59,6 @@ const createRoom = async (req, res) => {
 // Get all rooms (with optional filters)
 const getAllRooms = async (req, res) => {
   try {
-    // Extract query parameters for filtering
     const filters = {
       room_type: req.query.room_type,
       status: req.query.status,
@@ -59,14 +67,13 @@ const getAllRooms = async (req, res) => {
       search: req.query.search
     };
     
-    // Remove undefined filters
     Object.keys(filters).forEach(key => {
       if (filters[key] === undefined) {
         delete filters[key];
       }
     });
     
-    const rooms = await Room.findAll(filters);
+    const rooms = await findAllRooms(filters);
     
     return sendSuccess(res, 'Rooms retrieved successfully', {
       count: rooms.length,
@@ -84,7 +91,7 @@ const getRoomById = async (req, res) => {
   try {
     const { id } = req.params;
     
-    const room = await Room.findById(id);
+    const room = await findRoomById(id);
     
     if (!room) {
       return sendError(res, 'Room not found', 404);
@@ -103,7 +110,7 @@ const getRoomByNumber = async (req, res) => {
   try {
     const { room_number } = req.params;
     
-    const room = await Room.findByNumber(room_number);
+    const room = await findRoomByNumber(room_number);
     
     if (!room) {
       return sendError(res, 'Room not found', 404);
@@ -123,34 +130,29 @@ const updateRoom = async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    // Check if room exists
-    const existingRoom = await Room.findById(id);
+    const existingRoom = await findRoomById(id);
     if (!existingRoom) {
       return sendError(res, 'Room not found', 404);
     }
     
-    // If updating room_number, check if it's already taken by another room
     if (updateData.room_number && updateData.room_number !== existingRoom.room_number) {
-      const roomWithNumber = await Room.findByNumber(updateData.room_number);
+      const roomWithNumber = await findRoomByNumber(updateData.room_number);
       if (roomWithNumber && roomWithNumber.room_id !== id) {
         return sendError(res, 'Room number already exists', 409);
       }
     }
     
-    // Convert price to number if provided
     if (updateData.price !== undefined) {
       updateData.price = parseFloat(updateData.price);
     }
     
-    // Update room
-    const result = await Room.update(id, updateData);
+    const result = await updateRoomModel(id, updateData);
     
     if (!result.success) {
       return sendError(res, result.message || 'Failed to update room', 400);
     }
     
-    // Get updated room data
-    const updatedRoom = await Room.findById(id);
+    const updatedRoom = await findRoomById(id);
     
     return sendSuccess(res, 'Room updated successfully', updatedRoom);
     
@@ -165,14 +167,12 @@ const deleteRoom = async (req, res) => {
   try {
     const { id } = req.params;
     
-    // Check if room exists
-    const existingRoom = await Room.findById(id);
+    const existingRoom = await findRoomById(id);
     if (!existingRoom) {
       return sendError(res, 'Room not found', 404);
     }
     
-    // Delete room
-    const result = await Room.delete(id);
+    const result = await deleteRoomModel(id);
     
     if (!result.success) {
       return sendError(res, 'Failed to delete room', 400);
@@ -192,7 +192,16 @@ const deleteRoom = async (req, res) => {
 // Get available rooms
 const getAvailableRooms = async (req, res) => {
   try {
-    const availableRooms = await Room.getAvailableRooms();
+    const availableRooms = await findAvailableRooms();
+    console.log(availableRooms);
+
+    
+    if (availableRooms.length === 0) {
+      return sendSuccess(res, 'No available rooms found', {
+        count: 0,
+        rooms: []
+      });
+    }
     
     return sendSuccess(res, 'Available rooms retrieved successfully', {
       count: availableRooms.length,
@@ -201,16 +210,15 @@ const getAvailableRooms = async (req, res) => {
     
   } catch (error) {
     console.error('Get available rooms error:', error);
-    return sendError(res, 'Failed to retrieve available rooms', 500);
+    return sendError(res, 'Failed to retrieve available rooms: ' + error.message, 500);
   }
 };
 
 // Get room statistics
 const getRoomStatistics = async (req, res) => {
   try {
-    const stats = await Room.getRoomStats();
+    const stats = await getRoomStats();
     
-    // Calculate totals
     const totals = stats.reduce((acc, stat) => {
       acc.total_rooms += parseInt(stat.total_rooms);
       acc.available_rooms += parseInt(stat.available_rooms);
@@ -238,26 +246,23 @@ const updateRoomStatus = async (req, res) => {
       return sendError(res, 'Status is required', 400);
     }
     
-    // Check if room exists
-    const existingRoom = await Room.findById(id);
+    const existingRoom = await findRoomById(id);
     if (!existingRoom) {
       return sendError(res, 'Room not found', 404);
     }
     
-    // Valid statuses
     const validStatuses = ['available', 'occupied', 'maintenance', 'cleaning', 'reserved'];
     if (!validStatuses.includes(status)) {
       return sendError(res, `Invalid status. Valid statuses: ${validStatuses.join(', ')}`, 400);
     }
     
-    // Update status
-    const result = await Room.updateStatus(id, status);
+    const result = await updateRoomStatusModel(id, status);
     
     if (!result.success) {
       return sendError(res, 'Failed to update room status', 400);
     }
     
-    const updatedRoom = await Room.findById(id);
+    const updatedRoom = await findRoomById(id);
     
     return sendSuccess(res, 'Room status updated successfully', {
       room_id: id,
@@ -281,7 +286,7 @@ const searchRooms = async (req, res) => {
       return sendError(res, 'Search query is required', 400);
     }
     
-    const rooms = await Room.findAll({ search: q });
+    const rooms = await findAllRooms({ search: q });
     
     return sendSuccess(res, 'Search results retrieved successfully', {
       count: rooms.length,
@@ -295,7 +300,7 @@ const searchRooms = async (req, res) => {
   }
 };
 
-// Export all functions literally
+// Literal exports
 module.exports = {
   createRoom,
   getAllRooms,
