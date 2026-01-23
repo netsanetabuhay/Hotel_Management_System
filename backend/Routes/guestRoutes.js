@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+
 // Import all GuestController functions
 const {
   createGuest,
@@ -28,6 +29,8 @@ const { authenticate, authorize } = require('../Middleware/auth');
 router.get('/', getAllGuests);
 
 // Search guests by name, email, or phone
+// router.get('/search/:query', smartGuestSearch);
+
 router.get('/search', searchGuests);
 
 // Get guest by email

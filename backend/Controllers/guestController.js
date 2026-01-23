@@ -148,80 +148,119 @@ const getGuestByPhone = async (req, res) => {
   }
 };
 
-// Update guest details
+
 // const updateGuestHandler = async (req, res) => {
 //   try {
-//     const { id } = req.params;
+//     const { identifier } = req.params;
 //     const updateData = req.body;
+//     console.log('Update data received:', updateData);
     
-//     // Check if guest exists
-//     const existingGuest = await findGuestById(id);
-//     if (!existingGuest) {
-//       return sendError(res, 'Guest not found', 404);
+//     let existingGuest = null;
+    
+//     // Find guest by identifier
+//     if (identifier.includes('@')) {
+//       existingGuest = await findGuestByEmail(identifier);
+//     } else if (/^\d+$/.test(identifier)) {
+//       existingGuest = await findGuestByPhone(identifier);
+//     } else {
+//       existingGuest = await findGuestById(identifier);
 //     }
     
-//     // Update guest
-//     const result = await updateGuest(id, updateData);
+//     if (!existingGuest) {
+//       return res.status(404).json({
+//         success: false,
+//         message: 'Guest not found'
+//       });
+//     }
+    
+//     // Update guest (allow duplicates)
+//     const result = await updateGuest(existingGuest.guest_id, updateData);
     
 //     if (!result.success) {
-//       return sendError(res, result.message || 'Failed to update guest', 400);
+//       return res.status(400).json({
+//         success: false,
+//         message: result.message
+//       });
 //     }
     
-//     // Get updated guest data
-//     const updatedGuest = await findGuestById(id);
+//     // Get updated guest
+//     const updatedGuest = await findGuestById(existingGuest.guest_id);
     
-//     return sendSuccess(res, 'Guest updated successfully', updatedGuest);
+//     return res.json({
+//       success: true,
+//       message: 'Guest updated successfully',
+//       data: updatedGuest
+//     });
     
 //   } catch (error) {
 //     console.error('Update guest error:', error);
-//     return sendError(res, 'Failed to update guest: ' + error.message, 500);
+//     return res.status(500).json({
+//       success: false,
+//       message: 'Server error updating guest'
+//     });
 //   }
 // };
-// Update guest details (can find by id, email, or phone)
+
+
+// Delete guest
 const updateGuestHandler = async (req, res) => {
   try {
-    const { identifier } = req.params; // Changed from 'id' to 'identifier'
+    const { identifier } = req.params;
     const updateData = req.body;
-    console.log('Update data received:', updateData);
+    //  console.log('=== REQUEST DEBUG ===');
+    // console.log('Method:', req.method);
+    // console.log('URL:', req.url);
+    // console.log('Headers:', req.headers);
+    // console.log('Raw body:', req.body);
+    // console.log('Body type:', typeof req.body);
+    // console.log('=== END DEBUG ===');
+    // console.log('Update data received:', updateData);
     
     let existingGuest = null;
     
-    // Try to find guest by different identifiers
-    // Check if identifier is email format
+    // Find guest by identifier
     if (identifier.includes('@')) {
       existingGuest = await findGuestByEmail(identifier);
-    } 
-    // Check if identifier is phone number (only digits)
-    else if (/^\d+$/.test(identifier)) {
+    } else if (/^\d+$/.test(identifier)) {
       existingGuest = await findGuestByPhone(identifier);
-    }
-    // Otherwise treat as guest_id
-    else {
+    } else {
       existingGuest = await findGuestById(identifier);
     }
     
     if (!existingGuest) {
-      return sendError(res, 'Guest not found', 404);
+      return res.status(404).json({
+        success: false,
+        message: 'Guest not found'
+      });
     }
     
-    // Update guest using the actual guest_id
+    // Update guest
     const result = await updateGuest(existingGuest.guest_id, updateData);
     
     if (!result.success) {
-      return sendError(res, result.message || 'Failed to update guest', 400);
+      return res.status(400).json({
+        success: false,
+        message: result.message
+      });
     }
     
-    // Get updated guest data
+    // Get updated guest
     const updatedGuest = await findGuestById(existingGuest.guest_id);
     
-    return sendSuccess(res, 'Guest updated successfully', updatedGuest);
+    return res.json({
+      success: true,
+      message: 'Guest updated successfully',
+      data: updatedGuest
+    });
     
   } catch (error) {
     console.error('Update guest error:', error);
-    return sendError(res, 'Failed to update guest: ' + error.message, 500);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error updating guest'
+    });
   }
 };
-// Delete guest
 const deleteGuestHandler = async (req, res) => {
   try {
     const { id } = req.params;
