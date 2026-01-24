@@ -18,10 +18,8 @@ router.post('/login', loginUser);
 // Protected routes (require authentication)
 router.use(authenticate);
 
-// Get all users (admin only)
 router.get('/', authorize(['admin']), getAllUsers);
 
-// Get user by ID (admin or own profile)
 router.get('/:id', checkUserAccess, getUserByIdController);
 
 // Create new user (admin only)

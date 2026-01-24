@@ -12,45 +12,56 @@ const {
 } = require('../Models/guest');
 
 const { generateId } = require('../Utils/generateId');
-const { sendSuccess, sendError } = require('../Utils/response');
 
-// Create a new guest
+// Helper response functions
+const sendSuccess = (res, message, data = null, statusCode = 200) => {
+  return res.status(statusCode).json({
+    success: true,
+    message,
+    data
+  });
+};
+
+const sendError = (res, message, statusCode = 500) => {
+  return res.status(statusCode).json({
+    success: false,
+    message
+  });
+};
+
+// ========== CREATE GUEST ==========
 const createGuestHandler = async (req, res) => {
   try {
-    const { first_name, last_name, email, phone, address } = req.body;
+    const { first_name, email, last_name, phone, address } = req.body;
     
-    // Validation
-    if (!first_name || !last_name) {
-      return sendError(res, 'First name and last name are required', 400);
+    // Only first_name and email required
+    if (!first_name) {
+      return sendError(res, 'First name is required', 400);
     }
     
-    // Generate guest ID
-    const guest_id = generateId('GUEST');
+    if (!email) {
+      return sendError(res, 'Email is required', 400);
+    }
     
-    // Create guest data object
+    // Validate email format
+    if (!email.includes('@')) {
+      return sendError(res, 'Invalid email format', 400);
+    }
+    
+    const guest_id = generateId('GUEST');
     const guestData = {
       guest_id,
       first_name,
-      last_name,
-      email: email || null,
-      phone: phone || null,
-      address: address || null,
+      last_name: last_name || null,  // Optional
+      email,
+      phone: phone || null,          // Optional
+      address: address || null,      // Optional
       created_at: new Date()
     };
     
-    // Save to database
-    const result = await createGuest(guestData);
+    await createGuest(guestData);
     
-    return sendSuccess(res, 'Guest created successfully', {
-      guest_id,
-      first_name,
-      last_name,
-      email: guestData.email,
-      phone: guestData.phone,
-      address: guestData.address,
-      created_at: guestData.created_at
-    }, 201);
-    
+    return sendSuccess(res, 'Guest created successfully', guestData, 201);
   } catch (error) {
     console.error('Create guest error:', error);
     if (error.message.includes('already exists')) {
@@ -60,10 +71,9 @@ const createGuestHandler = async (req, res) => {
   }
 };
 
-// Get all guests (with optional filters)
+// ========== GET ALL GUESTS ==========
 const getAllGuests = async (req, res) => {
   try {
-    // Extract query parameters for filtering
     const filters = {
       first_name: req.query.first_name,
       last_name: req.query.last_name,
@@ -71,150 +81,169 @@ const getAllGuests = async (req, res) => {
       phone: req.query.phone
     };
     
-    // Remove undefined filters
     Object.keys(filters).forEach(key => {
-      if (filters[key] === undefined) {
-        delete filters[key];
-      }
+      if (filters[key] === undefined) delete filters[key];
     });
     
     const guests = await findAllGuests(filters);
-    
     return sendSuccess(res, 'Guests retrieved successfully', {
       count: guests.length,
       guests
     });
-    
   } catch (error) {
     console.error('Get all guests error:', error);
     return sendError(res, 'Failed to retrieve guests', 500);
   }
 };
 
-// Get single guest by ID
-const getGuestById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const guest = await findGuestById(id);
-    
-    if (!guest) {
-      return sendError(res, 'Guest not found', 404);
-    }
-    
-    return sendSuccess(res, 'Guest retrieved successfully', guest);
-    
-  } catch (error) {
-    console.error('Get guest by ID error:', error);
-    return sendError(res, 'Failed to retrieve guest', 500);
-  }
-};
-
-// Get guest by email
-const getGuestByEmail = async (req, res) => {
-  try {
-    const { email } = req.params;
-    
-    const guest = await findGuestByEmail(email);
-    
-    if (!guest) {
-      return sendError(res, 'Guest not found', 404);
-    }
-    
-    return sendSuccess(res, 'Guest retrieved successfully', guest);
-    
-  } catch (error) {
-    console.error('Get guest by email error:', error);
-    return sendError(res, 'Failed to retrieve guest', 500);
-  }
-};
-
-// Get guest by phone
-const getGuestByPhone = async (req, res) => {
-  try {
-    const { phone } = req.params;
-    
-    const guest = await findGuestByPhone(phone);
-    
-    if (!guest) {
-      return sendError(res, 'Guest not found', 404);
-    }
-    
-    return sendSuccess(res, 'Guest retrieved successfully', guest);
-    
-  } catch (error) {
-    console.error('Get guest by phone error:', error);
-    return sendError(res, 'Failed to retrieve guest', 500);
-  }
-};
 
 
-// const updateGuestHandler = async (req, res) => {
+// ========== UNIVERSAL SEARCH ==========
+// Handles ALL search types: ID, Email, Phone, Name
+// const searchGuestsHandler = async (req, res) => {
 //   try {
 //     const { identifier } = req.params;
-//     const updateData = req.body;
-//     console.log('Update data received:', updateData);
     
-//     let existingGuest = null;
-    
-//     // Find guest by identifier
-//     if (identifier.includes('@')) {
-//       existingGuest = await findGuestByEmail(identifier);
-//     } else if (/^\d+$/.test(identifier)) {
-//       existingGuest = await findGuestByPhone(identifier);
-//     } else {
-//       existingGuest = await findGuestById(identifier);
+//     if (!identifier) {
+//       return sendError(res, 'Search identifier is required', 400);
 //     }
     
-//     if (!existingGuest) {
-//       return res.status(404).json({
-//         success: false,
-//         message: 'Guest not found'
-//       });
+//     let guest = null;
+    
+//     // 1. Check if it's a guest_id (starts with GST)
+//     if (identifier.startsWith('GST')) {
+//       guest = await findGuestById(identifier);
+//     }
+//     // 2. Check if it's an email (contains @)
+//     else if (identifier.includes('@')) {
+//       guest = await findGuestByEmail(identifier);
+//     }
+//     // 3. Check if it's a phone number (only digits)
+//     else if (/^\d+$/.test(identifier)) {
+//       guest = await findGuestByPhone(identifier);
 //     }
     
-//     // Update guest (allow duplicates)
-//     const result = await updateGuest(existingGuest.guest_id, updateData);
-    
-//     if (!result.success) {
-//       return res.status(400).json({
-//         success: false,
-//         message: result.message
-//       });
+//     if (guest) {
+//       return sendSuccess(res, 'Guest found successfully', guest);
 //     }
     
-//     // Get updated guest
-//     const updatedGuest = await findGuestById(existingGuest.guest_id);
-    
-//     return res.json({
-//       success: true,
-//       message: 'Guest updated successfully',
-//       data: updatedGuest
-//     });
-    
+//     return sendError(res, 'Guest not found', 404);
 //   } catch (error) {
-//     console.error('Update guest error:', error);
-//     return res.status(500).json({
-//       success: false,
-//       message: 'Server error updating guest'
-//     });
+//     console.error('Search guests error:', error);
+//     return sendError(res, 'Server error during search', 500);
 //   }
 // };
+// Your current code:
+// const searchGuestsHandler = async (req, res) => {
+//   try {
+//     const { identifier } = req.params;
+//     console.log('Searching for:', identifier);
+//     console.log('Type of identifier:', typeof identifier);
+//     console.log('Starts with GST?:', identifier.startsWith('GST'));
+//     console.log('Contains @?:', identifier.includes('@'));
+//     console.log('Is only digits?:', /^\d+$/.test(identifier));
+    
+//     if (!identifier) {
+//       return sendError(res, 'Search identifier is required', 400);
+//     }
+    
+//     let guest = null;
+    
+//     // 1. Check if it's a guest_id (starts with GST)
+//     if (identifier.startsWith('GST')) {
+//       guest = await findGuestById(identifier);
+//     }
+//     // 2. Check if it's an email (contains @)
+//     else if (identifier.includes('@')) {
+//       guest = await findGuestByEmail(identifier);
+//     }
+//     // 3. Check if it's a phone number (only digits)
+//     else if (/^\d+$/.test(identifier)) {
+//       guest = await findGuestByPhone(identifier);
+//     }
+//     // MISSING: Name search logic!
+    
+//     if (guest) {
+//       return sendSuccess(res, 'Guest found successfully', guest);
+//     }
+    
+//     return sendError(res, 'Guest not found', 404);
+//   } catch (error) {
+//     console.error('Search guests error:', error);
+//     return sendError(res, 'Server error during search', 500);
+//   }
+// };
+// ========== UNIVERSAL SEARCH ==========
+// Handles ALL search types: ID, Email, Phone, Name
+const searchGuestsHandler = async (req, res) => {
+  try {
+    const { identifier } = req.params;
+    
+    // Debug logs
+    console.log('🔍 SEARCH DEBUG:');
+    console.log('Identifier:', identifier);
+    console.log('Starts with G?:', identifier.toUpperCase().startsWith('G'));
+    console.log('Contains @?:', identifier.includes('@'));
+    console.log('Is only digits?:', /^\d+$/.test(identifier));
+    
+    if (!identifier) {
+      return sendError(res, 'Search identifier is required', 400);
+    }
+    
+    let guest = null;
+    
+    // 1. Check if it's a guest_id (starts with G - case insensitive)
+    if (identifier.toUpperCase().startsWith('G')) {
+      console.log(' Trying ID search...');
+      guest = await findGuestById(identifier);
+      console.log('ID search result:', guest ? 'FOUND' : 'NOT FOUND');
+    }
+    // 2. Check if it's an email (contains @)
+    else if (identifier.includes('@')) {
+      console.log(' Trying email search...');
+      guest = await findGuestByEmail(identifier);
+      console.log('Email search result:', guest ? 'FOUND' : 'NOT FOUND');
+    }
+    // 3. Check if it's a phone number (only digits)
+    else if (/^\d+$/.test(identifier)) {
+      console.log(' Trying phone search...');
+      guest = await findGuestByPhone(identifier);
+      console.log('Phone search result:', guest ? 'FOUND' : 'NOT FOUND');
+    }
+    
+    // If found by ID/email/phone, return it
+    if (guest) {
+      return sendSuccess(res, 'Guest found successfully', guest);
+    }
+    
+    // 4. Try name search (for everything else, including names)
+    console.log(' Trying name search...');
+    // IMPORTANT: You need to import 'searchGuests' from your model!
+    // Check if it's imported at the top:
+    const guestsByName = await searchGuests(identifier);
+    console.log('Name search result count:', guestsByName.length);
+    
+    if (guestsByName.length > 0) {
+      return sendSuccess(res, 'Guests found by name', {
+        count: guestsByName.length,
+        guests: guestsByName
+      });
+    }
+    
+    console.log(' No results found for:', identifier);
+    return sendError(res, 'Guest not found', 404);
+    
+  } catch (error) {
+    console.error(' Search guests error:', error);
+    return sendError(res, 'Server error during search', 500);
+  }
+};
 
-
-// Delete guest
+// ========== UPDATE GUEST ==========
 const updateGuestHandler = async (req, res) => {
   try {
     const { identifier } = req.params;
     const updateData = req.body;
-    //  console.log('=== REQUEST DEBUG ===');
-    // console.log('Method:', req.method);
-    // console.log('URL:', req.url);
-    // console.log('Headers:', req.headers);
-    // console.log('Raw body:', req.body);
-    // console.log('Body type:', typeof req.body);
-    // console.log('=== END DEBUG ===');
-    // console.log('Update data received:', updateData);
     
     let existingGuest = null;
     
@@ -228,50 +257,33 @@ const updateGuestHandler = async (req, res) => {
     }
     
     if (!existingGuest) {
-      return res.status(404).json({
-        success: false,
-        message: 'Guest not found'
-      });
+      return sendError(res, 'Guest not found', 404);
     }
     
-    // Update guest
     const result = await updateGuest(existingGuest.guest_id, updateData);
     
     if (!result.success) {
-      return res.status(400).json({
-        success: false,
-        message: result.message
-      });
+      return sendError(res, result.message, 400);
     }
     
-    // Get updated guest
     const updatedGuest = await findGuestById(existingGuest.guest_id);
-    
-    return res.json({
-      success: true,
-      message: 'Guest updated successfully',
-      data: updatedGuest
-    });
-    
+    return sendSuccess(res, 'Guest updated successfully', updatedGuest);
   } catch (error) {
     console.error('Update guest error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error updating guest'
-    });
+    return sendError(res, 'Server error updating guest', 500);
   }
 };
+
+// ========== DELETE GUEST ==========
 const deleteGuestHandler = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // Check if guest exists
     const existingGuest = await findGuestById(id);
+    
     if (!existingGuest) {
       return sendError(res, 'Guest not found', 404);
     }
     
-    // Delete guest
     const result = await deleteGuest(id);
     
     if (!result.success) {
@@ -282,64 +294,34 @@ const deleteGuestHandler = async (req, res) => {
       guest_id: id,
       name: `${existingGuest.first_name} ${existingGuest.last_name}`
     });
-    
   } catch (error) {
     console.error('Delete guest error:', error);
     return sendError(res, 'Failed to delete guest', 500);
   }
 };
 
-// Search guests
-const searchGuestsHandler = async (req, res) => {
-  try {
-    const { q } = req.query;
-    
-    if (!q) {
-      return sendError(res, 'Search query is required', 400);
-    }
-    
-    const guests = await searchGuests(q);
-    
-    return sendSuccess(res, 'Search results retrieved successfully', {
-      count: guests.length,
-      query: q,
-      guests
-    });
-    
-  } catch (error) {
-    console.error('Search guests error:', error);
-    return sendError(res, 'Failed to search guests', 500);
-  }
-};
-
-// Get guest statistics
+// ========== GET GUEST STATISTICS ==========
 const getGuestStatistics = async (req, res) => {
   try {
     const stats = await getGuestStats();
-    
-    // Calculate total guests
     const totalGuests = stats.reduce((total, stat) => total + parseInt(stat.daily_count), 0);
     
     return sendSuccess(res, 'Guest statistics retrieved successfully', {
       total_guests: totalGuests,
       daily_stats: stats
     });
-    
   } catch (error) {
     console.error('Get guest statistics error:', error);
     return sendError(res, 'Failed to retrieve guest statistics', 500);
   }
 };
 
-// Literal exports
+// ========== EXPORTS ==========
 module.exports = {
   createGuest: createGuestHandler,
   getAllGuests,
-  getGuestById,
-  getGuestByEmail,
-  getGuestByPhone,
   updateGuest: updateGuestHandler,
   deleteGuest: deleteGuestHandler,
-  searchGuests: searchGuestsHandler,
+  searchGuests: searchGuestsHandler,  // ← This handles ALL searches
   getGuestStatistics
 };
