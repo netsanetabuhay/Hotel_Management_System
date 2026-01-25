@@ -157,7 +157,7 @@ const searchFoodItems = async (req, res) => {
 };
 
 //  UPDATE FOOD ITEM 
-const updateFoodItem = async (req, res) => {
+const updateFoodItemHandler = async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = req.body;
@@ -190,7 +190,7 @@ const updateFoodItem = async (req, res) => {
 };
 
 //  DELETE FOOD ITEM 
-const deleteFoodItem = async (req, res) => {
+const deleteFoodItemHandler = async (req, res) => {
   try {
     const { id } = req.params;
     const existingFoodItem = await findFoodItemById(id);
@@ -236,9 +236,8 @@ const getFoodStatistics = async (req, res) => {
 module.exports = {
   createFoodItem: createFoodItemHandler,
   getAllFoodItems,
-  updateFoodItem,
-  deleteFoodItem,
+  updateFoodItem:updateFoodItemHandler,
+  deleteFoodItem:deleteFoodItemHandler,
   searchFoodItems,
   getFoodStatistics
 };
-EOF
