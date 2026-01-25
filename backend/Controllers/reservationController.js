@@ -225,41 +225,58 @@ const deleteReservationHandler = async (req, res) => {
 };
 
 // CHECK ROOM AVAILABILITY (by room_id only)
+// CHECK ROOM AVAILABILITY (with date parameters)
+// CHECK ROOM AVAILABILITY (with date parameters)
 const checkAvailabilityHandler = async (req, res) => {
   try {
-    const room_id = req.query.room_id;
+    const room_id = req.params.room_id;
+    const check_in = req.query.check_in;
+    const check_out = req.query.check_out;
+    
+    console.log('Request received:', { room_id, check_in, check_out });
     
     if (!room_id) {
       return sendError(res, 'room_id is required', 400);
     }
     
-    // Check if room exists
-    const room = await findRoomById(room_id);
-    if (!room) {
+    if (!check_in || !check_out) {
+      return sendError(res, 'check_in and check_out are required', 400);
+    }
+    
+    // Validate dates
+    const checkInDate = new Date(check_in);
+    const checkOutDate = new Date(check_out);
+    if (checkInDate >= checkOutDate) {
+      return sendError(res, 'check_out must be after check_in', 400);
+    }
+    
+    // Check availability with dates
+    const availability = await checkRoomAvailability(room_id, check_in, check_out);
+    
+    console.log('Availability result:', availability);
+    
+    if (availability.message === 'Room not found') {
       return sendError(res, 'Room not found', 404);
     }
     
-    // Check availability by room_id only
-    const availability = await checkRoomAvailability(room_id);
-    
     return sendSuccess(res, 'Availability check completed', {
       room: {
-        room_id: room.room_id,
-        room_number: room.room_number,
-        room_type: room.room_type,
-        price: room.price,
-        status: room.status
+        room_id: room_id,
+        room_number: availability.room_number,
+        room_type: availability.room_type,
+        price: availability.price,
+        status: availability.room_status
       },
-      available: availability.available,
-      message: availability.message,
-      room_status: availability.room_status
+      check_in: check_in,
+      check_out: check_out,
+      availablity: availability.available,
+      message: availability.message
     });
   } catch (error) {
     console.error('Check availability error:', error);
-    return sendError(res, 'Failed to check availability', 500);
+    return sendError(res, 'Failed to check availability: ' + error.message, 500);
   }
 };
-
 // FIND AVAILABLE ROOMS
 const findAvailableRoomsHandler = async (req, res) => {
   try {

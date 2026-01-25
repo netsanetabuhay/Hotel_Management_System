@@ -230,44 +230,78 @@ const deleteReservation = async (reservation_id) => {
 
 // CHECK - Room availability
 // CHECK - Room availability by room_id only (current status)
-const checkRoomAvailability = async (room_id) => {
-  // Get current date
-  const currentDate = new Date().toISOString().split('T')[0];
+// CHECK - Room availability with specific dates
+// CHECK - Room availability with specific dates
+const checkRoomAvailability = async (room_id, check_in, check_out) => {
+  console.log('Checking availability for:', { room_id, check_in, check_out });
   
   const sql = `
     SELECT 
       CASE 
+        WHEN NOT EXISTS (SELECT 1 FROM rooms WHERE room_id = ?) THEN 'Room not found'
         WHEN r.status != 'available' THEN 'Room status is not available'
         WHEN EXISTS (
           SELECT 1 FROM reservations res 
           WHERE res.room_id = ? 
           AND res.status IN ('confirmed', 'checked_in')
-          AND ? BETWEEN res.check_in AND DATE_SUB(res.check_out, INTERVAL 1 DAY)
-        ) THEN 'Room is currently booked'
-        ELSE 'Room is available'
+          AND (
+            (res.check_in <= ? AND res.check_out >= ?) 
+            OR (res.check_in <= ? AND res.check_out >= ?) 
+            OR (res.check_in >= ? AND res.check_out <= ?)
+          )
+        ) THEN 'Room is booked for selected dates'
+        ELSE 'Room is available for selected dates'
       END as availability_status,
-      r.status as room_status
+      r.status as room_status,
+      r.room_number,
+      r.room_type,
+      r.price
     FROM rooms r
     WHERE r.room_id = ?
   `;
   
+  console.log('SQL:', sql);
+  console.log('Parameters:', [room_id, room_id, check_out, check_in, check_in, check_out, check_in, check_out, room_id]);
+  
   try {
-    const [rows] = await pool.query(sql, [room_id, currentDate, room_id]);
+    const [rows] = await pool.query(sql, [
+      room_id,        // For room exists check
+      room_id,        // For reservation check
+      check_out,      // For reservation check (res.check_in <= check_out)
+      check_in,       // For reservation check (res.check_out >= check_in)
+      check_in,       // For reservation check (res.check_in <= check_in)
+      check_out,      // For reservation check (res.check_out >= check_out)
+      check_in,       // For reservation check (res.check_in >= check_in)
+      check_out,      // For reservation check (res.check_out <= check_out)
+      room_id         // For room query
+    ]);
+    
+    console.log('Query result:', rows);
     
     if (rows.length === 0) {
       return { available: false, message: 'Room not found' };
     }
     
     const row = rows[0];
-    const isAvailable = row.availability_status === 'Room is available';
+    console.log('Row data:', row);
+    
+    if (row.availability_status === 'Room not found') {
+      return { available: false, message: 'Room not found' };
+    }
+    
+    const isAvailable = row.availability_status === 'Room is available for selected dates';
     
     return {
       available: isAvailable,
       message: row.availability_status,
-      room_status: row.room_status
+      room_status: row.room_status,
+      room_number: row.room_number,
+      room_type: row.room_type,
+      price: row.price
     };
   } catch (error) {
     console.error('Check room availability error:', error);
+    console.error('Error details:', error.message);
     throw error;
   }
 };
