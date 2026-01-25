@@ -36,7 +36,7 @@ router.get(
 );
 // Delete guest (Admin/Manager only)
 router.delete(
-  '/:id',
+  '/delet/:id',
   authenticate,
   authorize(['admin', 'manager']),
   deleteGuest
