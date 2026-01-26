@@ -16,7 +16,7 @@ const foodItemRoutes = require('./Routes/foodItemRoutes');
 const foodOrderRoutes = require('./Routes/foodOrderRoutes');
 const paymentRoutes = require('./Routes/paymentRoutes');
 const taskRoutes = require('./Routes/taskRoutes');
-// const activityRoutes = require('./Routes/activityRoutes');  
+const activityRoutes = require('./Routes/activityRoutes');  
 
 
 // // 3. INITIALIZE APP
@@ -42,7 +42,7 @@ app.use('/api/food-items', foodItemRoutes);
 app.use('/api/food-orders', foodOrderRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/tasks', taskRoutes);
-// app.use('/api/activities', activityRoutes);
+app.use('/api/activities', activityRoutes);
 
 // // 6. BASIC ROUTES
 app.get('/', (req, res) => {
@@ -77,30 +77,3 @@ app.listen(PORT, () => {
 // // 8. EXPORT APP
 module.exports = app;
 
-// app.js
-// const express = require('express');
-// const cors = require('cors');
-// const dotenv = require('dotenv');
-
-// dotenv.config();
-
-// const app = express();
-
-// // ✅ MUST be **first** before routes
-// app.use(cors());
-// app.use(express.json());               // Parse JSON bodies
-// app.use(express.urlencoded({ extended: true })); // Parse form data
-
-// // ROUTES
-// const guestRoutes = require('./Routes/guestRoutes');
-// app.use('/api/guests', guestRoutes);
-
-// // TEST ROUTE
-// app.get('/', (req, res) => res.json({ status: 'API running' }));
-
-// // 404
-// app.use((req, res) => res.status(404).json({ error: 'Route not found' }));
-
-// // SERVER
-// const PORT = process.env.PORT || 5000;
-// app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
