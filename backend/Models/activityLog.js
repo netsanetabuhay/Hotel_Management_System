@@ -590,122 +590,78 @@ const getSystemActivityStatus = async () => {
         throw new Error(`Database error: ${error.message}`);
     }
 };
-// UPDATE - Update task details
-const updateTask = async (task_id, updateData) => {
-    const setClauses = [];
-    const values = [];
-
-    // Build dynamic update query based on provided fields
-    if (updateData.title !== undefined) {
-        setClauses.push('title = ?');
-        values.push(updateData.title);
+// UPDATE - Update activity log
+const updateActivityLog = async (id, updateData) => {
+    // First check if log exists
+    const checkQuery = 'SELECT log_id FROM activity_logs WHERE log_id = ?';
+    const [checkResult] = await pool.query(checkQuery, [id]);
+    
+    if (checkResult.length === 0) {
+        return {
+            success: false,
+            message: 'Activity log not found',
+            data: null
+        };
     }
     
-    if (updateData.assigned_to !== undefined) {
-        setClauses.push('assigned_to = ?');
-        values.push(updateData.assigned_to);
+    // Only allow updating the activity field (not user_id or timestamp)
+    const allowedFields = ['activity'];
+    const updateFields = [];
+    const params = [];
+    
+    // Validate update data
+    if (updateData.activity !== undefined) {
+        if (typeof updateData.activity !== 'string' || updateData.activity.trim() === '') {
+            throw new Error('Activity must be a non-empty string');
+        }
+        if (updateData.activity.length > 200) {
+            throw new Error('Activity description is too long (max 200 characters)');
+        }
+        updateFields.push('activity = ?');
+        params.push(updateData.activity.trim());
     }
     
-    if (updateData.task_type !== undefined) {
-        setClauses.push('task_type = ?');
-        values.push(updateData.task_type);
+    // Add timestamp update
+    updateFields.push('timestamp = NOW()');
+    
+    if (updateFields.length === 0) {
+        return {
+            success: false,
+            message: 'No valid fields provided for update',
+            data: null
+        };
     }
     
-    if (updateData.status !== undefined) {
-        setClauses.push('status = ?');
-        values.push(updateData.status);
-    }
+    params.push(id);
     
-    if (updateData.room_id !== undefined) {
-        setClauses.push('room_id = ?');
-        values.push(updateData.room_id);
-    }
-    
-    if (updateData.due_date !== undefined) {
-        setClauses.push('due_date = ?');
-        values.push(updateData.due_date);
-    }
-
-    if (setClauses.length === 0) {
-        throw new Error('No fields provided for update');
-    }
-
-    // Add task_id to values
-    values.push(task_id);
-
-    const sql = `
-        UPDATE tasks 
-        SET ${setClauses.join(', ')} 
-        WHERE task_id = ?
+    const query = `
+        UPDATE activity_logs 
+        SET ${updateFields.join(', ')}
+        WHERE log_id = ?
     `;
-
-    try {
-        const [result] = await pool.query(sql, values);
-        
-        if (result.affectedRows === 0) {
-            return { 
-                success: false, 
-                message: 'Task not found' 
-            };
-        }
-        
-        // Get the updated task
-        const updatedTask = await findTaskById(task_id);
-        
-        return { 
-            success: true,
-            message: 'Task updated successfully',
-            data: updatedTask
-        };
-    } catch (error) {
-        console.error('Error in updateTask:', error);
-        
-        // Handle foreign key constraint errors
-        if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-            if (error.message.includes('assigned_to')) {
-                throw new Error('Assigned user not found');
-            } else if (error.message.includes('room_id')) {
-                throw new Error('Room not found');
-            }
-        }
-        
-        throw new Error(`Database error: ${error.message}`);
-    }
-};
-
-// Also add this function if you don't have it:
-const updateTaskStatus = async (task_id, new_status) => {
-    const sql = 'UPDATE tasks SET status = ? WHERE task_id = ?';
     
     try {
-        const [result] = await pool.query(sql, [new_status, task_id]);
+        const [result] = await pool.query(query, params);
         
-        if (result.affectedRows === 0) {
-            return { 
-                success: false, 
-                message: 'Task not found' 
+        if (result.affectedRows > 0) {
+            // Get the updated activity
+            const updatedActivity = await findActivityById(id);
+            return {
+                success: true,
+                message: 'Activity log updated successfully',
+                data: updatedActivity
+            };
+        } else {
+            return {
+                success: false,
+                message: 'Failed to update activity log',
+                data: null
             };
         }
-        
-        // Get the updated task
-        const updatedTask = await findTaskById(task_id);
-        
-        return { 
-            success: true,
-            message: 'Task status updated successfully',
-            data: updatedTask
-        };
     } catch (error) {
-        console.error('Error in updateTaskStatus:', error);
+        console.error('Error in updateActivityLog:', error);
         throw new Error(`Database error: ${error.message}`);
     }
-};
-
-// Don't forget to export the new functions
-module.exports = {
-    // ... your existing exports
-    updateTask,
-    updateTaskStatus
 };
 
 // READ - Search activities with advanced filters
@@ -817,8 +773,7 @@ module.exports = {
     deleteMultipleActivityLogs,
     deleteOldActivityLogs,
     countActivities,
-    updateTask,
-    updateTaskStatus,
+   updateActivityLog,
     getActivitySummary,
     getSystemActivityStatus,
     searchActivities

@@ -6,8 +6,7 @@ const {
     getActivity,  // Unified function for both single activity and user activities
     createActivity,
     deleteActivity,
-    updateTaskStatusController,
-    updateTaskController,
+    updateActivity,
     getActivityStats
 } = require('../Controllers/activityController');
 const { authenticate, authorize } = require('../Middleware/auth');
@@ -27,10 +26,7 @@ router.get('/user/:userId', getActivity);
 router.post('/', authorize(['admin', 'manager']), createActivity);
 
 // Update task (full update)
-router.put('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), updateTaskController);
-
-// Update task status only
-router.patch('/:id/status', authenticate, authorize(['admin', 'manager', 'receptionist', 'housekeeping']), updateTaskStatusController);
+router.put('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), updateActivity);
 
 // Get activity statistics (admin/manager only)
 router.get('/stats/overview', authorize(['admin', 'manager']), getActivityStats);

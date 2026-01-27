@@ -5,6 +5,7 @@ const {
     findActivitiesByUserId,
     createActivityLog,
     deleteActivityLog,
+    updateActivityLog,
     countActivities,
     getActivitySummary
 } = require('../Models/activityLog')
@@ -250,45 +251,60 @@ const handleGetUserActivities = async (req, res, userId) => {
         }
     });
 };
-// UPDATE task
-const updateTaskController = async (req, res) => {
+// PUT update an activity log
+const updateActivity = async (req, res) => {
     try {
         const { id } = req.params;
-        const updateData = req.body;
+        const { activity } = req.body;
         
-        // Validate required fields
-        if (!id) {
+        if (!activity) {
             return res.status(400).json({
                 success: false,
-                message: 'Task ID is required'
+                message: 'Activity description is required'
             });
         }
         
-        // Remove any fields that shouldn't be updated
-        delete updateData.task_id;
-        delete updateData.created_at;
-        
-        // Validate status if provided
-        if (updateData.status && !['pending', 'in-progress', 'completed', 'cancelled'].includes(updateData.status)) {
+        // Validate activity
+        if (typeof activity !== 'string' || activity.trim() === '') {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid status. Allowed values: pending, in-progress, completed, cancelled'
+                message: 'Activity must be a non-empty string'
             });
         }
         
-        // Validate task_type if provided
-        const validTaskTypes = ['cleaning', 'maintenance', 'room-service', 'check-in', 'check-out', 'other'];
-        if (updateData.task_type && !validTaskTypes.includes(updateData.task_type)) {
+        if (activity.length > 200) {
             return res.status(400).json({
                 success: false,
-                message: `Invalid task type. Allowed values: ${validTaskTypes.join(', ')}`
+                message: 'Activity description is too long (max 200 characters)'
             });
         }
         
-        const result = await updateTask(id, updateData);
+        // Check permissions before updating
+        const existingActivity = await findActivityById(id);
+        if (!existingActivity) {
+            return res.status(404).json({
+                success: false,
+                message: 'Activity log not found'
+            });
+        }
+        
+        // Only admin/manager can update activities
+        const isAdminOrManager = req.user && ['admin', 'manager'].includes(req.user.role);
+        const isOwnActivity = req.user && req.user.id === existingActivity.user_id;
+        
+        // Allow if admin/manager OR if it's their own activity
+        if (!isAdminOrManager && !isOwnActivity) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. You can only update your own activities'
+            });
+        }
+        
+        const updateData = { activity: activity.trim() };
+        const result = await updateActivityLog(id, updateData);
         
         if (!result.success) {
-            return res.status(404).json({
+            return res.status(400).json({
                 success: false,
                 message: result.message
             });
@@ -299,17 +315,11 @@ const updateTaskController = async (req, res) => {
             message: result.message,
             data: result.data
         });
+        
     } catch (error) {
-        console.error('Error updating task:', error);
+        console.error('Error updating activity:', error);
         
-        if (error.message.includes('not found')) {
-            return res.status(404).json({
-                success: false,
-                message: error.message
-            });
-        }
-        
-        if (error.message.includes('Invalid') || error.message.includes('Required')) {
+        if (error.message.includes('Activity must be') || error.message.includes('too long')) {
             return res.status(400).json({
                 success: false,
                 message: error.message
@@ -318,52 +328,7 @@ const updateTaskController = async (req, res) => {
         
         res.status(500).json({
             success: false,
-            message: 'Server error while updating task'
-        });
-    }
-};
-
-// UPDATE task status only
-const updateTaskStatusController = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { status } = req.body;
-        
-        if (!id || !status) {
-            return res.status(400).json({
-                success: false,
-                message: 'Task ID and status are required'
-            });
-        }
-        
-        // Validate status
-        const validStatuses = ['pending', 'in-progress', 'completed', 'cancelled'];
-        if (!validStatuses.includes(status)) {
-            return res.status(400).json({
-                success: false,
-                message: `Invalid status. Allowed values: ${validStatuses.join(', ')}`
-            });
-        }
-        
-        const result = await updateTaskStatus(id, status);
-        
-        if (!result.success) {
-            return res.status(404).json({
-                success: false,
-                message: result.message
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: result.message,
-            data: result.data
-        });
-    } catch (error) {
-        console.error('Error updating task status:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error while updating task status'
+            message: 'Server error while updating activity log'
         });
     }
 };
@@ -471,7 +436,6 @@ module.exports = {
     createActivity,
     deleteActivity,
     getActivityStats,
-    updateTaskStatusController,
-    updateTaskController,
+   updateActivity,
     logActivity
 };
