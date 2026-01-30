@@ -4,8 +4,9 @@ const {
     registerUser,
     loginUser,
     getAllUsers,
-    getUserByIdController,
+    searchUsersController,
     updateUser,
+    getUserByIdController,
     deleteUser,
     getUserStats
 } = require('../Controllers/userController');
@@ -19,7 +20,9 @@ router.post('/login', loginUser);
 router.use(authenticate);
 
 router.get('/', authorize(['admin']), getAllUsers);
+router.get
 
+router.get('/search', authenticate, authorize(['admin', 'manager']), searchUsersController);
 router.get('/:id', checkUserAccess, getUserByIdController);
 
 // Create new user (admin only)

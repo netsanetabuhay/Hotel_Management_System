@@ -6,6 +6,7 @@ const {
     createUser, 
     findUserById, 
     getAllUsersFromDB, 
+    searchUsersByCriteria,
     updateUserInDB, 
     deleteUserFromDB,
     findUserByUsername,
@@ -172,7 +173,7 @@ const getAllUsers = async (req, res) => {
     }
 };
 
-// Get single user by ID
+// // Get single user by ID
 const getUserByIdController = async (req, res) => {
     try {
         const user = await findUserById(req.params.id);
@@ -195,6 +196,56 @@ const getUserByIdController = async (req, res) => {
         res.status(500).json({ 
             success: false, 
             message: 'Server error fetching user' 
+        });
+    }
+};
+// Replace getUserByIdController with this search function
+const searchUsersController = async (req, res) => {
+    try {
+        const searchParams = {
+            user_id: req.query.user_id,
+            username: req.query.username,
+            email: req.query.email,
+            first_name: req.query.first_name,
+            last_name: req.query.last_name,
+            phone: req.query.phone,
+            role: req.query.role
+        };
+        
+        // Remove empty/undefined params
+        Object.keys(searchParams).forEach(key => {
+            if (!searchParams[key]) {
+                delete searchParams[key];
+            }
+        });
+        
+        // If no search parameters, return error
+        if (Object.keys(searchParams).length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                message: 'Please provide at least one search parameter' 
+            });
+        }
+        
+        const users = await searchUsersByCriteria(searchParams);
+        
+        if (users.length === 0) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'No users found matching your criteria' 
+            });
+        }
+        
+        res.json({
+            success: true,
+            count: users.length,
+            data: users
+        });
+    } catch (err) {
+        console.error('Search users error:', err);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error searching users' 
         });
     }
 };
@@ -309,7 +360,8 @@ module.exports = {
     registerUser,
     loginUser,
     getAllUsers,
-    getUserByIdController,
+  getUserByIdController,
+    searchUsersController,
     updateUser,
     deleteUser,
     getUserStats

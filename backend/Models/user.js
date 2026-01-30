@@ -15,6 +15,68 @@ const findUserByEmail = async (email) => {
     }
 };
 
+// Add this function to your userModel.js
+const searchUsersByCriteria = async (searchParams) => {
+    try {
+        const { 
+            user_id, 
+            username, 
+            email, 
+            first_name, 
+            last_name, 
+            phone, 
+            role 
+        } = searchParams;
+        
+        let conditions = [];
+        let values = [];
+        
+        if (user_id) {
+            conditions.push('user_id = ?');
+            values.push(user_id);
+        }
+        if (username) {
+            conditions.push('username LIKE ?');
+            values.push(`%${username}%`);
+        }
+        if (email) {
+            conditions.push('email LIKE ?');
+            values.push(`%${email}%`);
+        }
+        if (first_name) {
+            conditions.push('first_name LIKE ?');
+            values.push(`%${first_name}%`);
+        }
+        if (last_name) {
+            conditions.push('last_name LIKE ?');
+            values.push(`%${last_name}%`);
+        }
+        if (phone) {
+            conditions.push('phone LIKE ?');
+            values.push(`%${phone}%`);
+        }
+        if (role) {
+            conditions.push('role = ?');
+            values.push(role);
+        }
+        
+        // If no search criteria provided, return empty
+        if (conditions.length === 0) {
+            return [];
+        }
+        
+        const whereClause = conditions.join(' AND ');
+        const sql = `SELECT user_id, username, email, first_name, last_name, phone, role, status, created_at 
+                     FROM users WHERE ${whereClause} ORDER BY created_at DESC`;
+        
+        const [rows] = await pool.execute(sql, values);
+        return rows;
+    } catch (error) {
+        console.error('Error searching users by criteria:', error);
+        throw error;
+    }
+};
+
 // Find user by username
 const findUserByUsername = async (username) => {
     try {
@@ -221,6 +283,7 @@ module.exports = {
     findUserById,
     createUser,
     getAllUsersFromDB,
+    searchUsersByCriteria,
     updateUserInDB,
     deleteUserFromDB,
     countUsersFromDB,
