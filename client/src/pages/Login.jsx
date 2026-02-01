@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from  "../api/Axios";
+import { toast } from "react-toastify";
 
 function Login() {
   const navigate = useNavigate();
@@ -17,20 +18,19 @@ function Login() {
     };
     try {
       // Make API call to log in user
-      const response = await axios.post("/login", loginData);
+      const response = await axios.post("/users/login", loginData);
       console.log("Login response:", response.data);
-      alert("Login successful!");
-      
+     toast.success('Login successful!');
       // Store token in localStorage
       localStorage.setItem("token", response.data.token);
       
       // Navigate to home page or dashboard after successful login
-      navigate("./Home");
+      navigate("/Home");
       
       
     } catch (error) {
       console.error("Login failed:", error);
-      alert("Login failed. Please check your credentials.");      
+          
     }
   };
   

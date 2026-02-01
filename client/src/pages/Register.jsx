@@ -20,15 +20,15 @@ function Register() {
       username: usernameDom.current.value,
       email: emailDom.current.value,
       password: passwordDom.current.value,
-      firstName: firstNameDom.current.value,
-      lastName: lastNameDom.current.value,
+      first_name: firstNameDom.current.value,
+      last_name: lastNameDom.current.value,
       phone: phoneDom.current.value,
       role: roleDom.current.value,
     };
     
     try {
       // Make API call to register user
-      await Axios.post("/register", userData);
+      await Axios.post("/users/register", userData);
       
       // Navigate to login page after successful registration
       navigate("/login");
