@@ -7,6 +7,7 @@ const {
     createActivity,
     deleteActivity,
     updateActivity,
+    searchActivities,
     getActivityStats
 } = require('../Controllers/activityController');
 const { authenticate, authorize } = require('../Middleware/auth');
@@ -18,15 +19,13 @@ router.use(authenticate);
 router.get('/', authorize(['admin', 'manager']), getAllActivities);
 
 // Unified route for both activity by ID and activities by user
-// Pattern: /api/activities/id/{activityId} OR /api/activities/user/{userId}
-router.get('/id/:id', authorize(['admin', 'manager']), getActivity);
-router.get('/user/:userId', getActivity);
+router.get('/search', authenticate, authorize(['admin', 'manager']), searchActivities);
 
 // Create new activity log (admin/manager only)
 router.post('/', authorize(['admin', 'manager']), createActivity);
 
 // Update task (full update)
-router.put('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), updateActivity);
+router.patch('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), updateActivity);
 
 // Get activity statistics (admin/manager only)
 router.get('/stats/overview', authorize(['admin', 'manager']), getActivityStats);

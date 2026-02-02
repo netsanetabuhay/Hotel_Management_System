@@ -35,6 +35,15 @@ const authorize = (roles = []) => {
             });
         }
 
+        // Check if user has valid role ('user' or 'admin')
+        if (!['user', 'admin'].includes(req.user.role)) {
+            return res.status(403).json({
+                success: false,
+                message: 'Invalid user role'
+            });
+        }
+
+        // Check if user's role is in the allowed roles
         if (roles.length && !roles.includes(req.user.role)) {
             return res.status(403).json({
                 success: false,
@@ -48,11 +57,18 @@ const authorize = (roles = []) => {
 
 
 const checkUserAccess = (req, res, next) => {
-    // ensure if user's role is admin
     if (!req.user) {
         return res.status(401).json({
             success: false,
             message: 'Not authenticated'
+        });
+    }
+
+    // Check if user has valid role ('user' or 'admin')
+    if (!['user', 'admin'].includes(req.user.role)) {
+        return res.status(403).json({
+            success: false,
+            message: 'Invalid user role'
         });
     }
 

@@ -18,10 +18,10 @@ const promisePool = pool.promise();
 const testConnection = async () => {
     try {
         const [rows] = await promisePool.query('SELECT 1 + 1 AS result');
-        console.log('✅ Database connected successfully');
+        console.log(' Database connected successfully');
         return true;
     } catch (error) {
-        console.error('❌ Database connection failed:', error.message);
+        console.error('Database connection failed:', error.message);
         return false;
     }
 };

@@ -1,108 +1,97 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const dotenv = require('dotenv');
-const { 
-    findUserByEmail, 
-    createUser, 
-    findUserById, 
-    getAllUsersFromDB, 
-    searchUsersByCriteria,
-    updateUserInDB, 
+const {
+    checkUsernameExists,
+    checkEmailExists,
+    getUserByEmail,
+    createNewUser,
+    getAllUsersFromDB,
+    searchUsersInDB,
+    getUserByIdFromDB,
+    updateUserInDB,
+    checkUsernameExistsExcluding,
+    checkEmailExistsExcluding,
     deleteUserFromDB,
-    findUserByUsername,
-    countUsersFromDB 
-} = require('../Models/user');
-
-dotenv.config();
-
-// JWT token creation
-const createToken = (user) => {
-    return jwt.sign(
-        { 
-            id: user.user_id, 
-            role: user.role,
-            email: user.email 
-        }, 
-        process.env.JWT_SECRET, 
-        { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-    );
-};
+    getUserStatsFromDB,
+    updateUserPasswordInDB,
+    checkUserReservationsInDB,
+    checkUserFoodOrdersInDB
+} = require('../Models/userdb.js');
 
 // Register new user
 const registerUser = async (req, res) => {
     try {
-        const { username, email, password, first_name, last_name, phone, role } = req.body;
-        
-        if (!username || !email || !password || !first_name || !last_name || !phone) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'All fields are required' 
-            });
-        }
+        const { username, email, password, first_name, last_name, phone, role = 'user' } = req.body;
 
-        if (!email.includes('@')) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Invalid email format' 
-            });
-        }
-
-        // Check if email already exists
-        const existingEmail = await findUserByEmail(email);
-        if (existingEmail) {
-            return res.status(409).json({ 
-                success: false, 
-                message: 'Email already registered' 
+        // Validation
+        if (!username || !email || !password) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username, email, and password are required'
             });
         }
 
         // Check if username already exists
-        const existingUsername = await findUserByUsername(username);
-        if (existingUsername) {
-            return res.status(409).json({ 
-                success: false, 
-                message: 'Username already taken' 
+        const existingUsername = await checkUsernameExists(username);
+        if (existingUsername.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Username already exists'
+            });
+        }
+
+        // Check if email already exists
+        const existingEmail = await checkEmailExists(email);
+        if (existingEmail.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email already exists'
             });
         }
 
         // Hash password
-        const hashedPassword = bcrypt.hashSync(password, 10);
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
 
-        // Create user
+        // Generate user ID
+        const userId = 'USR' + Date.now();
+
+        // Prepare user data
         const userData = {
+            userId,
             username,
             email,
-            password_hash: hashedPassword,
-            first_name,
-            last_name,
-            phone,
-            role: role || 'staff',
-            status: 'active'
+            passwordHash,
+            first_name: first_name || null,
+            last_name: last_name || null,
+            phone: phone || null,
+            role: req.user?.role === 'admin' ? (role || 'user') : 'user'
         };
 
-        const userId = await createUser(userData);
+        // Create user in database
+        await createNewUser(userData);
+
+        // Get created user (without password)
+        const createdUser = await getUserByIdFromDB(userId);
+        const user = createdUser[0];
         
-        const token = createToken({ user_id: userId, email, role: role || 'staff' });
+        // Remove password from response
+        if (user) {
+            delete user.password_hash;
+        }
 
         res.status(201).json({
             success: true,
             message: 'User registered successfully',
-            token,
-            user: {
-                user_id: userId,
-                username,
-                email,
-                first_name,
-                last_name,
-                phone,
-                role: role || 'staff'
-            }
+            data: { user }
         });
-    } catch (err) {
-        console.error('Registration error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error during registration' 
+
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error during registration',
+            error: error.message
         });
     }
 };
@@ -111,46 +100,65 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
-        
+
+        // Validation
         if (!email || !password) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Email and password required' 
+            return res.status(400).json({
+                success: false,
+                message: 'Email and password are required'
             });
         }
 
-        const user = await findUserByEmail(email);
-        if (!user) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'User not found' 
-            });
-        }
-
-        const isMatch = bcrypt.compareSync(password, user.password_hash);
-        if (!isMatch) {
-            return res.status(401).json({ 
-                success: false, 
-                message: 'Invalid password' 
-            });
-        }
-
-        const token = createToken(user);
+        // Find user
+        const users = await getUserByEmail(email);
         
+        if (users.length === 0) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        const user = users[0];
+
+        // Check password
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid credentials'
+            });
+        }
+
+        // Create JWT payload
+        const payload = {
+            id: user.user_id,
+            username: user.username,
+            email: user.email,
+            role: user.role
+        };
+
+        // Generate token
+        const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '24h' });
+
         // Remove password from response
-        const { password_hash, ...userWithoutPassword } = user;
+        delete user.password_hash;
 
         res.json({
             success: true,
             message: 'Login successful',
-            token,
-            user: userWithoutPassword
+            data: {
+                user,
+                token
+            }
         });
-    } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error during login' 
+
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error during login',
+            error: error.message
         });
     }
 };
@@ -159,150 +167,145 @@ const loginUser = async (req, res) => {
 const getAllUsers = async (req, res) => {
     try {
         const users = await getAllUsersFromDB();
+        
+        // Remove passwords from all users
+        const usersWithoutPasswords = users.map(user => {
+            const { password_hash, ...userWithoutPassword } = user;
+            return userWithoutPassword;
+        });
+
         res.json({
             success: true,
-            count: users.length,
-            data: users
+            message: 'Users retrieved successfully',
+            data: usersWithoutPasswords
         });
-    } catch (err) {
-        console.error('Get all users error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error fetching users' 
+
+    } catch (error) {
+        console.error('Get all users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving users',
+            error: error.message
         });
     }
 };
 
-// // Get single user by ID
-const getUserByIdController = async (req, res) => {
-    try {
-        const user = await findUserById(req.params.id);
-        if (!user) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'User not found' 
-            });
-        }
-        
-        // Remove password from response
-        const { password_hash, ...userWithoutPassword } = user;
-        
-        res.json({
-            success: true,
-            data: userWithoutPassword
-        });
-    } catch (err) {
-        console.error('Get user by ID error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error fetching user' 
-        });
-    }
-};
-// Replace getUserByIdController with this search function
+// Search users (admin only)
 const searchUsersController = async (req, res) => {
     try {
-        const searchParams = {
-            user_id: req.query.user_id,
-            username: req.query.username,
-            email: req.query.email,
-            first_name: req.query.first_name,
-            last_name: req.query.last_name,
-            phone: req.query.phone,
-            role: req.query.role
-        };
+        const { search } = req.query;
         
-        // Remove empty/undefined params
-        Object.keys(searchParams).forEach(key => {
-            if (!searchParams[key]) {
-                delete searchParams[key];
-            }
+        if (!search) {
+            return res.status(400).json({
+                success: false,
+                message: 'Search query is required'
+            });
+        }
+
+        const users = await searchUsersInDB(search);
+        
+        // Remove passwords from all users
+        const usersWithoutPasswords = users.map(user => {
+            const { password_hash, ...userWithoutPassword } = user;
+            return userWithoutPassword;
         });
-        
-        // If no search parameters, return error
-        if (Object.keys(searchParams).length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Please provide at least one search parameter' 
-            });
-        }
-        
-        const users = await searchUsersByCriteria(searchParams);
-        
-        if (users.length === 0) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'No users found matching your criteria' 
-            });
-        }
-        
+
         res.json({
             success: true,
-            count: users.length,
-            data: users
+            message: 'Search results retrieved',
+            data: usersWithoutPasswords
         });
-    } catch (err) {
-        console.error('Search users error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error searching users' 
+
+    } catch (error) {
+        console.error('Search users error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error searching users',
+            error: error.message
         });
     }
 };
 
-// Update user details
+// Update user
 const updateUser = async (req, res) => {
     try {
-        const userId = req.params.id;
-        const { username, email, first_name, last_name, phone, role, status } = req.body;
+        const { id } = req.params;
+        const { first_name, last_name, phone, username, email } = req.body;
         
-        // Don't allow password update via this route
-        if (req.body.password) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Use change password route for password updates' 
+        // Check if user exists
+        const users = await getUserByIdFromDB(id);
+        if (users.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
             });
         }
 
-        const updateData = {
-            username,
-            email,
-            first_name,
-            last_name,
-            phone,
-            role,
-            status
-        };
-
-        // Remove undefined fields
-        Object.keys(updateData).forEach(key => {
-            if (updateData[key] === undefined) {
-                delete updateData[key];
+        // Prepare update data
+        const updateData = {};
+        
+        // Basic info updates (allowed for all)
+        if (first_name !== undefined) updateData.first_name = first_name;
+        if (last_name !== undefined) updateData.last_name = last_name;
+        if (phone !== undefined) updateData.phone = phone;
+        
+        // Admin-only updates
+        if (req.user.role === 'admin') {
+            if (username !== undefined) {
+                // Check if username exists for other users
+                const existingUsername = await checkUsernameExistsExcluding(username, id);
+                if (existingUsername.length > 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Username already exists'
+                    });
+                }
+                updateData.username = username;
             }
-        });
+            if (email !== undefined) {
+                // Check if email exists for other users
+                const existingEmail = await checkEmailExistsExcluding(email, id);
+                if (existingEmail.length > 0) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Email already exists'
+                    });
+                }
+                updateData.email = email;
+            }
+        }
 
-        const updatedUser = await updateUserInDB(userId, updateData);
-        
-        if (!updatedUser) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'User not found' 
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No fields to update'
             });
         }
 
+        // Update user
+        await updateUserInDB(id, updateData);
+
+        // Get updated user
+        const updatedUsers = await getUserByIdFromDB(id);
+        const updatedUser = updatedUsers[0];
+        
         // Remove password from response
-        const { password_hash, ...userWithoutPassword } = updatedUser;
+        if (updatedUser) {
+            delete updatedUser.password_hash;
+        }
 
         res.json({
             success: true,
             message: 'User updated successfully',
-            data: userWithoutPassword
+            data: updatedUser
         });
-    } catch (err) {
-        console.error('Update user error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error updating user' 
+
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error updating user',
+            error: error.message
         });
     }
 };
@@ -310,59 +313,129 @@ const updateUser = async (req, res) => {
 // Delete user
 const deleteUser = async (req, res) => {
     try {
-        const userId = req.params.id;
+        const { id } = req.params;
+        const currentUserId = req.user.id;
         
-        const deleted = await deleteUserFromDB(userId);
-        
-        if (!deleted) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'User not found' 
+        // Check if user exists
+        const users = await getUserByIdFromDB(id);
+        if (users.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
             });
         }
 
-        res.json({
-            success: true,
-            message: 'User deleted successfully'
-        });
-    } catch (err) {
-        console.error('Delete user error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error deleting user' 
-        });
-    }
-};
-
-// Get user statistics
-const getUserStats = async (req, res) => {
-    try {
-        const totalUsers = await countUsersFromDB();
+        const userToDelete = users[0];
         
+        // Authorization checks
+        if (req.user.role === 'user') {
+            // Regular users can only delete their own account
+            if (currentUserId !== id) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You can only delete your own account'
+                });
+            }
+        }
+        // Admin users can delete any account
+
+        // Check if user has related records
+        const hasReservations = await checkUserReservationsInDB(id);
+        const hasFoodOrders = await checkUserFoodOrdersInDB(id);
+
+        // Delete user
+        await deleteUserFromDB(id);
+
         res.json({
             success: true,
+            message: 'User deleted successfully',
             data: {
-                total_users: totalUsers,
-                // Add more statistics as needed
+                hadReservations: hasReservations.length > 0,
+                hadFoodOrders: hasFoodOrders.length > 0
             }
         });
-    } catch (err) {
-        console.error('Get user stats error:', err);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error fetching user statistics' 
+
+    } catch (error) {
+        console.error('Delete user error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error deleting user',
+            error: error.message
         });
     }
 };
 
-// Export all functions
+// Get user statistics (admin only)
+const getUserStats = async (req, res) => {
+    try {
+        const stats = await getUserStatsFromDB();
+
+        res.json({
+            success: true,
+            message: 'User statistics retrieved',
+            data: stats
+        });
+
+    } catch (error) {
+        console.error('Get user stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving user statistics',
+            error: error.message
+        });
+    }
+};
+
+// Reset password
+const resetPassword = async (req, res) => {
+    try {
+        const { email, newPassword } = req.body;
+
+        if (!email || !newPassword) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email and new password are required'
+            });
+        }
+
+        // Check if user exists
+        const users = await getUserByEmail(email);
+        if (users.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+
+        // Hash new password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+
+        // Update password
+        await updateUserPasswordInDB(email, passwordHash);
+
+        res.json({
+            success: true,
+            message: 'Password reset successfully'
+        });
+
+    } catch (error) {
+        console.error('Reset password error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error resetting password',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
     registerUser,
     loginUser,
     getAllUsers,
-  getUserByIdController,
     searchUsersController,
     updateUser,
     deleteUser,
-    getUserStats
+    getUserStats,
+    resetPassword
 };

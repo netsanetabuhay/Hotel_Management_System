@@ -34,7 +34,7 @@ router.put('/:id', authorize(['admin', 'manager', 'receptionist']), updatePaymen
 router.delete('/:id', authorize(['admin']), deletePayment);
 
 // Update payment status
-router.put('/status/:id', authorize(['admin', 'manager', 'receptionist']), updatePaymentStatus);
+router.patch('/status/:id', authorize(['admin', 'manager', 'receptionist']), updatePaymentStatus);
 
 // Get payment statistics
 router.get('/stats/statistics', authorize(['admin', 'manager']), getPaymentStatistics);

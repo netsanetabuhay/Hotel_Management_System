@@ -6,33 +6,29 @@ const {
     getAllUsers,
     searchUsersController,
     updateUser,
-    getUserByIdController,
     deleteUser,
-    getUserStats
+    getUserStats,
+    resetPassword
 } = require('../Controllers/userController');
 const { authenticate, authorize, checkUserAccess } = require('../Middleware/auth');
 
 // Public routes
 router.post('/register', registerUser);
 router.post('/login', loginUser);
+router.post('/reset-password', resetPassword);
 
 // Protected routes (require authentication)
 router.use(authenticate);
-
+//get all users (admin only)
 router.get('/', authorize(['admin']), getAllUsers);
-router.get
-
-router.get('/search', authenticate, authorize(['admin', 'manager']), searchUsersController);
-router.get('/:id', checkUserAccess, getUserByIdController);
-
-// Create new user (admin only)
+// Search users (admin only)
+router.get('/search', authenticate, authorize(['admin']), searchUsersController);
+//
 router.post('/', authorize(['admin']), registerUser);
-
-// Update user (admin or own profile)
-router.put('/:id', checkUserAccess, updateUser);
-
-// Delete user (admin only)
-router.delete('/:id', authorize(['admin']), deleteUser);
+// Update user
+router.patch('/:id', checkUserAccess, updateUser);
+// Delete user 
+router.delete('/:id', authorize(['admin','user']), deleteUser);
 
 // Get user statistics (admin only)
 router.get('/stats/overview', authorize(['admin']), getUserStats);

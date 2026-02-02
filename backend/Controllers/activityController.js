@@ -7,6 +7,7 @@ const {
     deleteActivityLog,
     updateActivityLog,
     countActivities,
+    searchActivities: searchActivitiesModel,
     getActivitySummary
 } = require('../Models/activityLog')
 
@@ -183,6 +184,75 @@ const getActivityV2 = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Server error while fetching activity data'
+        });
+    }
+};
+
+//search activities
+// ========== SEARCH ACTIVITIES ==========
+const searchActivities = async (req, res) => {
+    try {
+        const {
+            searchText,      // Search in activity, username, first_name, last_name
+            userId,          // Filter by specific user
+            role,            // Filter by user role
+            startDate,       // Filter by date range
+            endDate,
+            sortBy = 'timestamp',
+            sortOrder = 'DESC',
+            page = 1,
+            limit = 50
+        } = req.query;
+
+        const searchCriteria = {
+            searchText,
+            userId,
+            role,
+            startDate,
+            endDate,
+            sortBy,
+            sortOrder,
+            page: parseInt(page),
+            limit: parseInt(limit)
+        };
+
+        // Remove undefined values
+        Object.keys(searchCriteria).forEach(key => {
+            if (searchCriteria[key] === undefined) {
+                delete searchCriteria[key];
+            }
+        });
+
+        const result = await searchActivitiesModel(searchCriteria);
+
+        return res.status(200).json({
+            success: true,
+            message: 'Activities search completed successfully',
+            data: {
+                activities: result.activities,
+                pagination: {
+                    page: result.page,
+                    limit: result.limit,
+                    total: result.total,
+                    totalPages: result.totalPages
+                },
+                filters: {
+                    searchText: searchText || 'none',
+                    userId: userId || 'none',
+                    role: role || 'none',
+                    dateRange: {
+                        start: startDate || 'none',
+                        end: endDate || 'none'
+                    }
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Search activities error:', error);
+        return res.status(500).json({
+            success: false,
+            message: 'Failed to search activities: ' + error.message
         });
     }
 };
@@ -437,5 +507,6 @@ module.exports = {
     deleteActivity,
     getActivityStats,
    updateActivity,
-    logActivity
+    logActivity,
+    searchActivities
 };
