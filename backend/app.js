@@ -12,11 +12,11 @@ const roomRoutes = require('./Routes/roomRoutes');
 const reservationRoutes = require('./Routes/reservationRoutes');
 const foodItemRoutes = require('./Routes/foodItemRoutes');
 const foodOrderRoutes = require('./Routes/foodOrderRoutes');
-// const  food_order_itemsRoutes = require('./Routes/food_order_itemsRoutes');
 
 
 // // 3. INITIALIZE APP
 const app = express();
+
 
 // // 4. APPLY MIDDLEWARE
 app.use(cors());                          // Enable CORS
@@ -37,6 +37,9 @@ app.get('/', (req, res) => {
         message: 'Hotel Management System API',
         version: '1.0.0',
         status: 'running'
+    });
+    app.get('/health', (req, res) => {
+        res.json({ status: 'OK' });
     });
 });
 
