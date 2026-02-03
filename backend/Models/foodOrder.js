@@ -1,418 +1,329 @@
 const { pool } = require('../Config/database');
 
-// CREATE - Create new food order
-const createFoodOrder = async (orderData) => {
-  const connection = await pool.getConnection();
-  
-  try {
-    await connection.beginTransaction();
+// 1. Create food order (with items)
+const createFoodOrder = async (orderData, orderItems) => {
+    const connection = await pool.getConnection();
     
-    // 1. Create the main food order
-    const orderSql = `
-      INSERT INTO food_orders 
-        (order_id, guest_id, room_id, order_type, status, total_amount, created_at) 
-      VALUES 
-        (?, ?, ?, ?, ?, ?, ?)
+    try {
+        await connection.beginTransaction();
+        
+        // Create main order
+        const orderQuery = `
+            INSERT INTO food_orders 
+            (food_order_id, user_id, order_status, payment_status, order_place)
+            VALUES (?, ?, ?, ?, ?)
+        `;
+        await connection.execute(orderQuery, [
+            orderData.food_order_id,
+            orderData.user_id,
+            orderData.order_status,
+            orderData.payment_status,
+            orderData.order_place
+        ]);
+        
+        // Create order items
+        for (const item of orderItems) {
+            const itemQuery = `
+                INSERT INTO food_order_items 
+                (food_order_id, food_id, quantity, price)
+                VALUES (?, ?, ?, ?)
+            `;
+            await connection.execute(itemQuery, [
+                orderData.food_order_id,
+                item.food_id,
+                item.quantity,
+                item.price
+            ]);
+        }
+        
+        await connection.commit();
+        return { success: true, orderId: orderData.food_order_id };
+        
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+};
+
+// 2. Get orders with filters
+const getFoodOrders = async (filters = {}, userId = null, isAdmin = false) => {
+    let query = `
+        SELECT 
+            fo.*,
+            u.username,
+            u.email
+        FROM food_orders fo
+        JOIN users u ON fo.user_id = u.user_id
+        WHERE 1=1
     `;
     
-    const orderValues = [
-      orderData.order_id,
-      orderData.guest_id,
-      orderData.room_id,
-      orderData.order_type || 'room_service',
-      orderData.status || 'pending',
-      orderData.total_amount || 0.00,
-      orderData.created_at || new Date()
-    ];
+    const params = [];
     
-    await connection.query(orderSql, orderValues);
-    
-    // 2. Create order items if provided
-    if (orderData.items && orderData.items.length > 0) {
-      const itemSql = `
-        INSERT INTO order_items 
-          (order_id, food_id, quantity, price) 
-        VALUES 
-          (?, ?, ?, ?)
-      `;
-      
-      for (const item of orderData.items) {
-        await connection.query(itemSql, [
-          orderData.order_id,
-          item.food_id,
-          item.quantity,
-          item.price
-        ]);
-      }
+    // User restriction: non-admin users only see their own orders
+    if (!isAdmin && userId) {
+        query += ' AND fo.user_id = ?';
+        params.push(userId);
     }
     
-    await connection.commit();
-    
-    return { 
-      success: true, 
-      message: 'Food order created successfully',
-      orderId: orderData.order_id 
-    };
-    
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-};
-
-// READ - Get all food orders with filters
-const findAllFoodOrders = async (filters = {}) => {
-  let sql = `
-    SELECT fo.*, 
-           g.first_name as guest_first_name,
-           g.last_name as guest_last_name,
-           g.email as guest_email,
-           r.room_number,
-           r.room_type
-    FROM food_orders fo
-    LEFT JOIN guests g ON fo.guest_id = g.guest_id
-    LEFT JOIN rooms r ON fo.room_id = r.room_id
-    WHERE 1 = 1
-  `;
-  
-  const values = [];
-
-  if (filters.guest_id) {
-    sql += ' AND fo.guest_id = ?';
-    values.push(filters.guest_id);
-  }
-  
-  if (filters.room_id) {
-    sql += ' AND fo.room_id = ?';
-    values.push(filters.room_id);
-  }
-  
-  if (filters.status) {
-    sql += ' AND fo.status = ?';
-    values.push(filters.status);
-  }
-  
-  if (filters.order_type) {
-    sql += ' AND fo.order_type = ?';
-    values.push(filters.order_type);
-  }
-  
-  if (filters.start_date) {
-    sql += ' AND DATE(fo.created_at) >= ?';
-    values.push(filters.start_date);
-  }
-  
-  if (filters.end_date) {
-    sql += ' AND DATE(fo.created_at) <= ?';
-    values.push(filters.end_date);
-  }
-
-  sql += ' ORDER BY fo.created_at DESC';
-
-  try {
-    const [rows] = await pool.query(sql, values);
-    
-    // Get order items for each order
-    for (const order of rows) {
-      const [items] = await pool.query(
-        'SELECT oi.*, fi.name as food_name, fi.category FROM order_items oi LEFT JOIN food_items fi ON oi.food_id = fi.food_id WHERE oi.order_id = ?',
-        [order.order_id]
-      );
-      order.items = items;
+    // Apply filters
+    if (filters.order_status) {
+        query += ' AND fo.order_status = ?';
+        params.push(filters.order_status);
     }
     
+    if (filters.payment_status) {
+        query += ' AND fo.payment_status = ?';
+        params.push(filters.payment_status);
+    }
+    
+    if (filters.order_id) {
+        query += ' AND fo.food_order_id = ?';
+        params.push(filters.order_id);
+    }
+    
+    if (filters.created_from) {
+        query += ' AND DATE(fo.created_at) >= ?';
+        params.push(filters.created_from);
+    }
+    
+    if (filters.created_to) {
+        query += ' AND DATE(fo.created_at) <= ?';
+        params.push(filters.created_to);
+    }
+    
+    // Admin-only filters
+    if (isAdmin) {
+        if (filters.user_id) {
+            query += ' AND fo.user_id = ?';
+            params.push(filters.user_id);
+        }
+    }
+    
+    query += ' ORDER BY fo.created_at DESC';
+    
+    const [rows] = await pool.execute(query, params);
     return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Get single food order by ID
-const findFoodOrderById = async (order_id) => {
-  try {
-    // Get main order details
-    const [orders] = await pool.query(
-      `SELECT fo.*, 
-              g.first_name as guest_first_name,
-              g.last_name as guest_last_name,
-              g.email as guest_email,
-              g.phone as guest_phone,
-              r.room_number,
-              r.room_type
-       FROM food_orders fo
-       LEFT JOIN guests g ON fo.guest_id = g.guest_id
-       LEFT JOIN rooms r ON fo.room_id = r.room_id
-       WHERE fo.order_id = ?`,
-      [order_id]
-    );
+// 3. Get order by ID with items
+const getFoodOrderByIdWithItems = async (orderId) => {
+    // Get order details
+    const orderQuery = `
+        SELECT 
+            fo.*,
+            u.username,
+            u.email
+        FROM food_orders fo
+        JOIN users u ON fo.user_id = u.user_id
+        WHERE fo.food_order_id = ?
+    `;
+    const [orderRows] = await pool.execute(orderQuery, [orderId]);
     
-    if (orders.length === 0) {
-      return null;
+    if (orderRows.length === 0) {
+        return { order: null, items: [] };
     }
-    
-    const order = orders[0];
     
     // Get order items
-    const [items] = await pool.query(
-      `SELECT oi.*, 
-              fi.name as food_name, 
-              fi.category,
-              fi.description
-       FROM order_items oi 
-       LEFT JOIN food_items fi ON oi.food_id = fi.food_id 
-       WHERE oi.order_id = ?`,
-      [order_id]
-    );
+    const itemsQuery = `
+        SELECT 
+            foi.*,
+            fi.name,
+            fi.category
+        FROM food_order_items foi
+        JOIN food_items fi ON foi.food_id = fi.food_id
+        WHERE foi.food_order_id = ?
+        ORDER BY foi.id
+    `;
+    const [itemRows] = await pool.execute(itemsQuery, [orderId]);
     
-    order.items = items;
+    // Calculate total
+    const total = itemRows.reduce((sum, item) => sum + (item.price * item.quantity), 0);
     
-    return order;
-  } catch (error) {
-    throw error;
-  }
+    return {
+        order: { ...orderRows[0], total },
+        items: itemRows
+    };
 };
 
-// READ - Get food orders by guest ID
-const findFoodOrdersByGuestId = async (guest_id) => {
-  const sql = `
-    SELECT fo.*, r.room_number, r.room_type 
-    FROM food_orders fo
-    LEFT JOIN rooms r ON fo.room_id = r.room_id
-    WHERE fo.guest_id = ? 
-    ORDER BY fo.created_at DESC
-  `;
-  
-  try {
-    const [rows] = await pool.query(sql, [guest_id]);
+// 4. Check if user owns the order
+const checkFoodOrderOwnership = async (orderId, userId) => {
+    const query = 'SELECT food_order_id FROM food_orders WHERE food_order_id = ? AND user_id = ?';
+    const [rows] = await pool.execute(query, [orderId, userId]);
+    return rows.length > 0;
+};
+
+// 5. Get order status
+const getFoodOrderStatus = async (orderId) => {
+    const query = 'SELECT order_status FROM food_orders WHERE food_order_id = ?';
+    const [rows] = await pool.execute(query, [orderId]);
+    return rows[0]?.order_status || null;
+};
+
+// 6. Update food order (status/payment)
+const updateFoodOrder = async (orderId, updateData) => {
+    const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(orderId);
     
-    // Get order items for each order
-    for (const order of rows) {
-      const [items] = await pool.query(
-        'SELECT oi.*, fi.name as food_name FROM order_items oi LEFT JOIN food_items fi ON oi.food_id = fi.food_id WHERE oi.order_id = ?',
-        [order.order_id]
-      );
-      order.items = items;
+    const query = `UPDATE food_orders SET ${fields} WHERE food_order_id = ?`;
+    const [result] = await pool.execute(query, values);
+    return result;
+};
+
+// 7. Update food order items (for order modification)
+const updateFoodOrderItems = async (orderId, newItems) => {
+    const connection = await pool.getConnection();
+    
+    try {
+        await connection.beginTransaction();
+        
+        // Delete existing items
+        const deleteQuery = 'DELETE FROM food_order_items WHERE food_order_id = ?';
+        await connection.execute(deleteQuery, [orderId]);
+        
+        // Insert new items
+        for (const item of newItems) {
+            const insertQuery = `
+                INSERT INTO food_order_items 
+                (food_order_id, food_id, quantity, price)
+                VALUES (?, ?, ?, ?)
+            `;
+            await connection.execute(insertQuery, [
+                orderId,
+                item.food_id,
+                item.quantity,
+                item.price
+            ]);
+        }
+        
+        await connection.commit();
+        return { success: true };
+        
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
     }
-    
-    return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Get food orders by room ID
-const findFoodOrdersByRoomId = async (room_id) => {
-  const sql = `
-    SELECT fo.*, 
-           g.first_name as guest_first_name,
-           g.last_name as guest_last_name
-    FROM food_orders fo
-    LEFT JOIN guests g ON fo.guest_id = g.guest_id
-    WHERE fo.room_id = ? 
-    ORDER BY fo.created_at DESC
-  `;
-  
-  try {
-    const [rows] = await pool.query(sql, [room_id]);
+// 8. Delete/cancel food order
+const deleteFoodOrder = async (orderId) => {
+    const connection = await pool.getConnection();
     
-    // Get order items for each order
-    for (const order of rows) {
-      const [items] = await pool.query(
-        'SELECT oi.*, fi.name as food_name FROM order_items oi LEFT JOIN food_items fi ON oi.food_id = fi.food_id WHERE oi.order_id = ?',
-        [order.order_id]
-      );
-      order.items = items;
+    try {
+        await connection.beginTransaction();
+        
+        // Delete order items first
+        const deleteItemsQuery = 'DELETE FROM food_order_items WHERE food_order_id = ?';
+        await connection.execute(deleteItemsQuery, [orderId]);
+        
+        // Delete order
+        const deleteOrderQuery = 'DELETE FROM food_orders WHERE food_order_id = ?';
+        await connection.execute(deleteOrderQuery, [orderId]);
+        
+        await connection.commit();
+        return { success: true };
+        
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
     }
-    
-    return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Search food orders (unified search)
-const searchFoodOrders = async (query) => {
-  const sql = `
-    SELECT fo.*, 
-           g.first_name as guest_first_name,
-           g.last_name as guest_last_name,
-           g.email as guest_email,
-           r.room_number
-    FROM food_orders fo
-    LEFT JOIN guests g ON fo.guest_id = g.guest_id
-    LEFT JOIN rooms r ON fo.room_id = r.room_id
-    WHERE fo.order_id LIKE ? 
-       OR g.first_name LIKE ? 
-       OR g.last_name LIKE ? 
-       OR g.email LIKE ? 
-       OR r.room_number LIKE ?
-       OR fo.status LIKE ?
-    ORDER BY fo.created_at DESC
-  `;
-  
-  try {
-    const searchPattern = `%${query}%`;
-    const [rows] = await pool.query(sql, [
-      searchPattern, searchPattern, searchPattern, 
-      searchPattern, searchPattern, searchPattern
-    ]);
-    
-    // Get order items for each order
-    for (const order of rows) {
-      const [items] = await pool.query(
-        'SELECT oi.*, fi.name as food_name FROM order_items oi LEFT JOIN food_items fi ON oi.food_id = fi.food_id WHERE oi.order_id = ?',
-        [order.order_id]
-      );
-      order.items = items;
-    }
-    
-    return rows;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// UPDATE - Update food order details
-const updateFoodOrder = async (order_id, updateData) => {
-  const setClauses = [];
-  const values = [];
-
-  const { guest_id, room_id, order_type, status, total_amount } = updateData;
-
-  if (guest_id !== undefined) {
-    setClauses.push('guest_id = ?');
-    values.push(guest_id);
-  }
-  
-  if (room_id !== undefined) {
-    setClauses.push('room_id = ?');
-    values.push(room_id);
-  }
-
-  if (order_type !== undefined) {
-    setClauses.push('order_type = ?');
-    values.push(order_type);
-  }
-
-  if (status !== undefined) {
-    setClauses.push('status = ?');
-    values.push(status);
-  }
-
-  if (total_amount !== undefined) {
-    setClauses.push('total_amount = ?');
-    values.push(parseFloat(total_amount).toFixed(2));
-  }
-
-  if (setClauses.length === 0) {
-    return { 
-      success: false, 
-      message: 'No fields provided for update' 
-    };
-  }
-
-  values.push(order_id);
-
-  const sql = `UPDATE food_orders SET ${setClauses.join(', ')} WHERE order_id = ?`;
-
-  try {
-    const [result] = await pool.query(sql, values);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Food order updated successfully' : 'Food order not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Update error:', error);
-    return { 
-      success: false,
-      message: error.message || 'Database error during update'
-    };
-  }
-};
-
-// UPDATE - Update food order status only
-const updateFoodOrderStatus = async (order_id, status) => {
-  const sql = 'UPDATE food_orders SET status = ? WHERE order_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [status, order_id]);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Food order status updated' : 'Food order not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Update status error:', error);
-    throw error;
-  }
-};
-
-// DELETE - Remove food order
-const deleteFoodOrder = async (order_id) => {
-  const connection = await pool.getConnection();
-  
-  try {
-    await connection.beginTransaction();
-    
-    // First delete order items
-    await connection.query('DELETE FROM order_items WHERE order_id = ?', [order_id]);
-    
-    // Then delete the order
-    const [result] = await connection.query('DELETE FROM food_orders WHERE order_id = ?', [order_id]);
-    
-    await connection.commit();
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Food order deleted successfully' : 'Food order not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-};
-
-// READ - Get food order statistics
+// 9. Get food order statistics
 const getFoodOrderStats = async () => {
-  const sql = `
-    SELECT 
-      COUNT(*) as total_orders,
-      status,
-      COUNT(*) as status_count,
-      SUM(total_amount) as total_revenue,
-      DATE(created_at) as date,
-      COUNT(*) as daily_count
-    FROM food_orders 
-    GROUP BY status, DATE(created_at)
-    ORDER BY DATE(created_at) DESC, status_count DESC
-  `;
-  
-  try {
-    const [rows] = await pool.query(sql);
-    return rows;
-  } catch (error) {
-    throw error;
-  }
+    // Total orders by status
+    const statusQuery = `
+        SELECT 
+            order_status,
+            COUNT(*) as count,
+            SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) as paid_count
+        FROM food_orders 
+        GROUP BY order_status
+        ORDER BY order_status
+    `;
+    const [statusResult] = await pool.execute(statusQuery);
+    
+    // Daily orders (last 7 days)
+    const dailyQuery = `
+        SELECT 
+            DATE(created_at) as date,
+            COUNT(*) as order_count,
+            SUM(
+                (SELECT SUM(foi.quantity * foi.price) 
+                 FROM food_order_items foi 
+                 WHERE foi.food_order_id = fo.food_order_id)
+            ) as daily_revenue
+        FROM food_orders fo
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY date DESC
+    `;
+    const [dailyResult] = await pool.execute(dailyQuery);
+    
+    // Most popular food items
+    const popularItemsQuery = `
+        SELECT 
+            fi.food_id,
+            fi.name,
+            fi.category,
+            SUM(foi.quantity) as total_quantity,
+            COUNT(DISTINCT foi.food_order_id) as order_count,
+            SUM(foi.quantity * foi.price) as total_revenue
+        FROM food_order_items foi
+        JOIN food_items fi ON foi.food_id = fi.food_id
+        GROUP BY fi.food_id, fi.name, fi.category
+        ORDER BY total_quantity DESC
+        LIMIT 10
+    `;
+    const [popularItemsResult] = await pool.execute(popularItemsQuery);
+    
+    // Revenue by order place
+    const revenueByPlaceQuery = `
+        SELECT 
+            order_place,
+            COUNT(*) as order_count,
+            SUM(
+                (SELECT SUM(foi.quantity * foi.price) 
+                 FROM food_order_items foi 
+                 WHERE foi.food_order_id = fo.food_order_id)
+            ) as total_revenue
+        FROM food_orders fo
+        WHERE order_place IS NOT NULL
+        GROUP BY order_place
+        ORDER BY total_revenue DESC
+    `;
+    const [revenueByPlaceResult] = await pool.execute(revenueByPlaceQuery);
+    
+    return {
+        byStatus: statusResult,
+        dailyOrders: dailyResult,
+        popularItems: popularItemsResult,
+        revenueByPlace: revenueByPlaceResult
+    };
 };
 
-// Export all functions
+// 10. Get food price for order
+const getFoodPrice = async (foodId) => {
+    const query = 'SELECT price FROM food_items WHERE food_id = ?';
+    const [rows] = await pool.execute(query, [foodId]);
+    return rows[0]?.price || 0;
+};
+
 module.exports = {
-  createFoodOrder,
-  findAllFoodOrders,
-  findFoodOrderById,
-  findFoodOrdersByGuestId,
-  findFoodOrdersByRoomId,
-  searchFoodOrders,
-  updateFoodOrder,
-  updateFoodOrderStatus,
-  deleteFoodOrder,
-  getFoodOrderStats
+    createFoodOrder,
+    getFoodOrders,
+    getFoodOrderByIdWithItems,
+    checkFoodOrderOwnership,
+    getFoodOrderStatus,
+    updateFoodOrder,
+    updateFoodOrderItems,
+    deleteFoodOrder,
+    getFoodOrderStats,
+    getFoodPrice
 };

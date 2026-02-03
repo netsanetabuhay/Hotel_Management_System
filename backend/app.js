@@ -11,7 +11,7 @@ const userRoutes = require('./Routes/userRoutes');
 const roomRoutes = require('./Routes/roomRoutes');
 const reservationRoutes = require('./Routes/reservationRoutes');
 const foodItemRoutes = require('./Routes/foodItemRoutes');
-// const foodOrderRoutes = require('./Routes/foodOrderRoutes');
+const foodOrderRoutes = require('./Routes/foodOrderRoutes');
 // const  food_order_itemsRoutes = require('./Routes/food_order_itemsRoutes');
 
 
@@ -29,7 +29,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/room-orders', reservationRoutes);
 app.use('/api/food-items', foodItemRoutes);
-// app.use('/api/food-orders', foodOrderRoutes);
+app.use('/api/food-orders', foodOrderRoutes);
 // app.use('/api/food-order-items', food_order_itemsRoutes);
 // // 6. BASIC ROUTES
 app.get('/', (req, res) => {

@@ -1,37 +1,30 @@
 const express = require('express');
 const router = express.Router();
-
-// Import controller functions
 const {
-  createFoodOrder,
-  getAllFoodOrders,
-  updateFoodOrder,
-  deleteFoodOrder,
-  updateFoodOrderStatus,
-  searchFoodOrders
-} = require('../Controllers/foodOrderController');
-
-// Import auth middleware
+    createFoodOrderController,
+    getFoodOrdersController,
+    updateFoodOrderController,
+    deleteFoodOrderController,
+    getFoodOrderStatsController
+} = require('../Controllers/foodOrderController.js');
 const { authenticate, authorize } = require('../Middleware/auth');
 
-//  PUBLIC ROUTES 
-// Guest can create food order
-router.post('/', createFoodOrder);
+// All routes require authentication
+router.use(authenticate);
 
-//  PROTECTED ROUTES 
-// Get all food orders (Staff only)
-router.get('/', authenticate, authorize(['admin', 'manager', 'chef', 'waiter', 'receptionist']), getAllFoodOrders);
+// 1. Create food order (users only)
+router.post('/', createFoodOrderController);
 
-// UNIFIED SEARCH for food orders
-router.get('/search/:identifier', authenticate, authorize(['admin', 'manager', 'chef', 'waiter', 'receptionist']), searchFoodOrders);
+// 2. Get food orders (smart: user sees own, admin sees all)
+router.get('/', getFoodOrdersController);
 
-// Update food order (Staff only)
-router.put('/:id', authenticate, authorize(['admin', 'manager', 'chef', 'waiter']), updateFoodOrder);
+// 3. Update food order (user: update/cancel pending, admin can update payment status and satus of the order ordered by user )
+router.patch('/:id', updateFoodOrderController);
 
-// Update food order status (Kitchen staff)
-router.patch('/:id/status', authenticate, authorize(['admin', 'manager', 'chef', 'waiter']), updateFoodOrderStatus);
+// 4. Delete food order (user: delete pending, admin: delete any)
+router.delete('/:id', deleteFoodOrderController);
 
-// Delete food order (Admin/Manager only)
-router.delete('/:id', authenticate, authorize(['admin', 'manager']), deleteFoodOrder);
+// 5. Get statistics (admin only)
+router.get('/stats/overview', authorize(['admin']), getFoodOrderStatsController);
 
 module.exports = router;

@@ -1,315 +1,524 @@
-// Import from Models
 const {
-  createFoodOrder,
-  findAllFoodOrders,
-  findFoodOrderById,
-  findFoodOrdersByGuestId,
-  findFoodOrdersByRoomId,
-  searchFoodOrders,
-  updateFoodOrder,
-  updateFoodOrderStatus,
-  deleteFoodOrder,
-  getFoodOrderStats
-} = require('../Models/foodOrder');
+    createFoodOrder,
+    getFoodOrders,
+    getFoodOrderByIdWithItems,
+    checkFoodOrderOwnership,
+    getFoodOrderStatus,
+    updateFoodOrder,
+    updateFoodOrderItems,
+    deleteFoodOrder,
+    getFoodOrderStats,
+    getFoodPrice
+} = require('../Models/foodOrder.js');
 
-const { generateId } = require('../Utils/generateId');
-const { findGuestById } = require('../Models/guest');
-const { findRoomById } = require('../Models/room');
-const { findFoodItemById } = require('../Models/foodItem');
+// 1. Create food order
+const createFoodOrderController = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const { order_place, items } = req.body;
 
-// Helper response functions
-const sendSuccess = (res, message, data = null, statusCode = 200) => {
-  return res.status(statusCode).json({
-    success: true,
-    message,
-    data
-  });
-};
+        // Validation
+        if (!order_place || !items || !Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Order place and at least one food item are required'
+            });
+        }
 
-const sendError = (res, message, statusCode = 500) => {
-  return res.status(statusCode).json({
-    success: false,
-    message
-  });
-};
+        // Validate items
+        const validatedItems = [];
+        for (const item of items) {
+            if (!item.food_id || !item.quantity || item.quantity <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Each item must have valid food_id and quantity > 0'
+                });
+            }
+            
+            // Get current price
+            const price = await getFoodPrice(item.food_id);
+            if (price === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Food item ${item.food_id} not found or has invalid price`
+                });
+            }
+            
+            validatedItems.push({
+                food_id: item.food_id,
+                quantity: item.quantity,
+                price: price
+            });
+        }
 
-//  CREATE FOOD ORDER 
-const createFoodOrderHandler = async (req, res) => {
-  try {
-    const { guest_id, room_id, items, order_type, special_instructions } = req.body;
-    
-    if (!guest_id || !room_id || !items || !Array.isArray(items) || items.length === 0) {
-      return sendError(res, 'guest_id, room_id, and at least one food item are required', 400);
-    }
-    
-    // Verify guest exists
-    const guest = await findGuestById(guest_id);
-    if (!guest) {
-      return sendError(res, 'Guest not found', 404);
-    }
-    
-    // Verify room exists
-    const room = await findRoomById(room_id);
-    if (!room) {
-      return sendError(res, 'Room not found', 404);
-    }
-    
-    // Verify all food items exist and calculate total
-    let total_amount = 0;
-    for (const item of items) {
-      const foodItem = await findFoodItemById(item.food_id);
-      if (!foodItem) {
-        return sendError(res, `Food item ${item.food_id} not found`, 404);
-      }
-      if (!item.quantity || item.quantity <= 0) {
-        return sendError(res, 'Quantity must be greater than 0 for all items', 400);
-      }
-      item.price = foodItem.price;
-      total_amount += foodItem.price * item.quantity;
-    }
-    
-    const order_id = generateId('ORD');
-    const orderData = {
-      order_id,
-      guest_id,
-      room_id,
-      order_type: order_type || 'room_service',
-      status: 'pending',
-      total_amount: total_amount.toFixed(2),
-      created_at: new Date(),
-      items: items
-    };
-    
-    await createFoodOrder(orderData);
-    
-    const newOrder = await findFoodOrderById(order_id);
-    
-    return sendSuccess(res, 'Food order created successfully', newOrder, 201);
-  } catch (error) {
-    console.error('Create food order error:', error);
-    return sendError(res, 'Failed to create food order: ' + error.message, 500);
-  }
-};
+        // Generate order ID
+        const orderId = 'FOOD' + Date.now();
 
-//  GET ALL FOOD ORDERS 
-const getAllFoodOrderHandler = async (req, res) => {
-  try {
-    const filters = {
-      guest_id: req.query.guest_id,
-      room_id: req.query.room_id,
-      status: req.query.status,
-      order_type: req.query.order_type,
-      start_date: req.query.start_date,
-      end_date: req.query.end_date
-    };
-    
-    Object.keys(filters).forEach(key => {
-      if (filters[key] === undefined || filters[key] === '') delete filters[key];
-    });
-    
-    const foodOrders = await findAllFoodOrders(filters);
-    
-    return sendSuccess(res, 'Food orders retrieved successfully', {
-      count: foodOrders.length,
-      orders: foodOrders
-    });
-  } catch (error) {
-    console.error('Get all food orders error:', error);
-    return sendError(res, 'Failed to retrieve food orders', 500);
-  }
-};
+        // Prepare order data
+        const orderData = {
+            food_order_id: orderId,
+            user_id: userId,
+            order_status: 'pending',
+            payment_status: 'paid', // Default since no payment integration
+            order_place: order_place
+        };
 
-//  UNIFIED SEARCH 
-const searchFoodOrderHandler = async (req, res) => {
-  try {
-    const { identifier } = req.params;
-    
-    console.log('🔍 FOOD ORDER SEARCH DEBUG:');
-    console.log('Identifier:', identifier);
-    
-    if (!identifier || identifier === 'undefined') {
-      // If no identifier, return all orders
-      const allOrders = await findAllFoodOrders({});
-      return sendSuccess(res, 'All food orders retrieved', {
-        count: allOrders.length,
-        orders: allOrders
-      });
-    }
-    
-    // 1. Check if it's an order_id (starts with ORD)
-    if (identifier.toUpperCase().startsWith('ORD')) {
-      console.log(' Trying order ID search...');
-      const order = await findFoodOrderById(identifier);
-      console.log('Order ID search result:', order ? 'FOUND' : 'NOT FOUND');
-      
-      if (order) {
-        return sendSuccess(res, 'Food order found by ID', order);
-      }
-    }
-    
-    // 2. Check if it's a guest_id (starts with GST or GUEST)
-    if (identifier.toUpperCase().startsWith('GST') || identifier.toUpperCase().startsWith('GUEST')) {
-      console.log(' Trying guest ID search...');
-      const ordersByGuest = await findFoodOrdersByGuestId(identifier);
-      console.log('Guest search result count:', ordersByGuest.length);
-      
-      if (ordersByGuest.length > 0) {
-        return sendSuccess(res, `Food orders found for guest ${identifier}`, {
-          guest_id: identifier,
-          count: ordersByGuest.length,
-          orders: ordersByGuest
+        // Create order with items
+        await createFoodOrder(orderData, validatedItems);
+
+        // Get created order with items
+        const orderWithItems = await getFoodOrderByIdWithItems(orderId);
+
+        res.status(201).json({
+            success: true,
+            message: 'Food order created successfully',
+            data: orderWithItems
         });
-      }
-    }
-    
-    // 3. Check if it's a room_id (starts with RM)
-    if (identifier.toUpperCase().startsWith('RM')) {
-      console.log(' Trying room ID search...');
-      const ordersByRoom = await findFoodOrdersByRoomId(identifier);
-      console.log('Room search result count:', ordersByRoom.length);
-      
-      if (ordersByRoom.length > 0) {
-        return sendSuccess(res, `Food orders found for room ${identifier}`, {
-          room_id: identifier,
-          count: ordersByRoom.length,
-          orders: ordersByRoom
+
+    } catch (error) {
+        console.error('Create food order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error creating food order',
+            error: error.message
         });
-      }
     }
-    
-    // 4. Try general search
-    console.log(' Trying general search...');
-    const searchResults = await searchFoodOrders(identifier);
-    console.log('General search result count:', searchResults.length);
-    
-    if (searchResults.length > 0) {
-      return sendSuccess(res, 'Food orders found by search', {
-        search_term: identifier,
-        count: searchResults.length,
-        orders: searchResults
-      });
-    }
-    
-    console.log(' No results found for:', identifier);
-    return sendError(res, 'No food orders found matching your search', 404);
-    
-  } catch (error) {
-    console.error(' Search food orders error:', error);
-    return sendError(res, 'Server error during search', 500);
-  }
 };
 
-//  UPDATE FOOD ORDER 
-const updateFoodOrderHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-    
-    const existingOrder = await findFoodOrderById(id);
-    if (!existingOrder) {
-      return sendError(res, 'Food order not found', 404);
+// 2. Get food orders (smart: user sees own, admin sees all)
+const getFoodOrdersController = async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const isAdmin = req.user.role === 'admin';
+        
+        // Extract filters
+        const filters = {};
+        
+        if (req.query.order_status) filters.order_status = req.query.order_status;
+        if (req.query.payment_status) filters.payment_status = req.query.payment_status;
+        if (req.query.order_id) filters.order_id = req.query.order_id;
+        if (req.query.created_from) filters.created_from = req.query.created_from;
+        if (req.query.created_to) filters.created_to = req.query.created_to;
+        
+        if (isAdmin && req.query.user_id) {
+            filters.user_id = req.query.user_id;
+        }
+
+        // Get orders
+        const orders = await getFoodOrders(filters, userId, isAdmin);
+
+        // If specific order requested, get with items
+        if (filters.order_id && orders.length === 1) {
+            const orderWithItems = await getFoodOrderByIdWithItems(filters.order_id);
+            return res.json({
+                success: true,
+                message: 'Order retrieved with items',
+                data: orderWithItems
+            });
+        }
+
+        const message = isAdmin 
+            ? 'All food orders retrieved' 
+            : 'Your food orders retrieved';
+
+        res.json({
+            success: true,
+            message,
+            data: orders
+        });
+
+    } catch (error) {
+        console.error('Get food orders error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving food orders',
+            error: error.message
+        });
     }
-    
-    const result = await updateFoodOrder(id, updateData);
-    
-    if (!result.success) {
-      return sendError(res, result.message, 400);
-    }
-    
-    const updatedOrder = await findFoodOrderById(id);
-    return sendSuccess(res, 'Food order updated successfully', updatedOrder);
-  } catch (error) {
-    console.error('Update food order error:', error);
-    return sendError(res, 'Server error updating food order', 500);
-  }
 };
 
-//  UPDATE FOOD ORDER STATUS 
-const updateFoodOrderStatusHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    if (!status) {
-      return sendError(res, 'Status is required', 400);
+// 3. Update food order
+// const updateFoodOrderController = async (req, res) => {
+//     try {
+//         const { id } = req.params;
+//         const userId = req.user.id;
+//         const isAdmin = req.user.role === 'admin';
+        
+//         // Check if order exists
+//         const orderWithItems = await getFoodOrderByIdWithItems(id);
+//         if (!orderWithItems.order) {
+//             return res.status(404).json({
+//                 success: false,
+//                 message: 'Food order not found'
+//             });
+//         }
+
+//         const currentOrder = orderWithItems.order;
+//         const currentStatus = currentOrder.order_status;
+        
+//         // Authorization check
+//         if (!isAdmin) {
+//             const ownsOrder = await checkFoodOrderOwnership(id, userId);
+//             if (!ownsOrder) {
+//                 return res.status(403).json({
+//                     success: false,
+//                     message: 'You can only update your own orders'
+//                 });
+//             }
+//         }
+
+//         const { order_status, payment_status, items, order_place } = req.body;
+//         const updateData = {};
+        
+//         // Regular user updates (only allowed when pending)
+//         if (!isAdmin) {
+//             if (currentStatus !== 'pending') {
+//                 return res.status(400).json({
+//                     success: false,
+//                     message: 'You can only update orders with "pending" status'
+//                 });
+//             }
+            
+//             // Users can only update items or order place
+//             if (items && Array.isArray(items) && items.length > 0) {
+//                 // Validate new items
+//                 const validatedItems = [];
+//                 for (const item of items) {
+//                     if (!item.food_id || !item.quantity || item.quantity <= 0) {
+//                         return res.status(400).json({
+//                             success: false,
+//                             message: 'Each item must have valid food_id and quantity > 0'
+//                         });
+//                     }
+                    
+//                     const price = await getFoodPrice(item.food_id);
+//                     if (price === 0) {
+//                         return res.status(400).json({
+//                             success: false,
+//                             message: `Food item ${item.food_id} not found`
+//                         });
+//                     }
+                    
+//                     validatedItems.push({
+//                         food_id: item.food_id,
+//                         quantity: item.quantity,
+//                         price: price
+//                     });
+//                 }
+                
+//                 await updateFoodOrderItems(id, validatedItems);
+//             }
+            
+//             if (order_place !== undefined) {
+//                 updateData.order_place = order_place;
+//             }
+            
+//             // Users can cancel order by setting status to 'cancelled'
+//             if (order_status === 'cancelled') {
+//                 updateData.order_status = 'cancelled';
+//             } else if (order_status && order_status !== 'pending') {
+//                 return res.status(403).json({
+//                     success: false,
+//                     message: 'You can only cancel orders, not change status'
+//                 });
+//             }
+//         }
+        
+//         // Admin updates
+//         if (isAdmin) {
+//             if (order_status !== undefined) {
+//                 if (!['pending', 'preparing', 'delivered', 'cancelled'].includes(order_status)) {
+//                     return res.status(400).json({
+//                         success: false,
+//                         message: 'Invalid order status'
+//                     });
+//                 }
+//                 updateData.order_status = order_status;
+//             }
+            
+//             if (payment_status !== undefined) {
+//                 if (!['paid', 'unpaid'].includes(payment_status)) {
+//                     return res.status(400).json({
+//                         success: false,
+//                         message: 'Invalid payment status'
+//                     });
+//                 }
+//                 updateData.payment_status = payment_status;
+//             }
+            
+//             if (order_place !== undefined) {
+//                 updateData.order_place = order_place;
+//             }
+            
+//             // Admin can also update items
+//             if (items && Array.isArray(items) && items.length > 0) {
+//                 const validatedItems = [];
+//                 for (const item of items) {
+//                     if (!item.food_id || !item.quantity || item.quantity <= 0) {
+//                         return res.status(400).json({
+//                             success: false,
+//                             message: 'Each item must have valid food_id and quantity > 0'
+//                         });
+//                     }
+                    
+//                     const price = await getFoodPrice(item.food_id);
+//                     if (price === 0) {
+//                         return res.status(400).json({
+//                             success: false,
+//                             message: `Food item ${item.food_id} not found`
+//                         });
+//                     }
+                    
+//                     validatedItems.push({
+//                         food_id: item.food_id,
+//                         quantity: item.quantity,
+//                         price: price
+//                     });
+//                 }
+                
+//                 await updateFoodOrderItems(id, validatedItems);
+//             }
+//         }
+
+//         // Update order if there are changes
+//         if (Object.keys(updateData).length > 0) {
+//             await updateFoodOrder(id, updateData);
+//         }
+
+//         // Get updated order
+//         const updatedOrder = await getFoodOrderByIdWithItems(id);
+
+//         res.json({
+//             success: true,
+//             message: 'Food order updated successfully',
+//             data: updatedOrder
+//         });
+
+//     } catch (error) {
+//         console.error('Update food order error:', error);
+//         res.status(500).json({
+//             success: false,
+//             message: 'Server error updating food order',
+//             error: error.message
+//         });
+//     }
+// };
+// 3. Update food order
+const updateFoodOrderController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const isAdmin = req.user.role === 'admin';
+        
+        // Check if order exists
+        const orderWithItems = await getFoodOrderByIdWithItems(id);
+        if (!orderWithItems.order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Food order not found'
+            });
+        }
+
+        const currentOrder = orderWithItems.order;
+        const currentStatus = currentOrder.order_status;
+        
+        // Authorization check
+        if (!isAdmin) {
+            const ownsOrder = await checkFoodOrderOwnership(id, userId);
+            if (!ownsOrder) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You can only update your own orders'
+                });
+            }
+        }
+
+        const { order_status, payment_status, items, order_place } = req.body;
+        const updateData = {};
+        
+        // Regular user updates (only allowed when pending)
+        if (!isAdmin) {
+            if (currentStatus !== 'pending') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'You can only update orders with "pending" status'
+                });
+            }
+            
+            // Users can update items
+            if (items && Array.isArray(items) && items.length > 0) {
+                // Validate new items
+                const validatedItems = [];
+                for (const item of items) {
+                    if (!item.food_id || !item.quantity || item.quantity <= 0) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Each item must have valid food_id and quantity > 0'
+                        });
+                    }
+                    
+                    const price = await getFoodPrice(item.food_id);
+                    if (price === 0) {
+                        return res.status(400).json({
+                            success: false,
+                            message: `Food item ${item.food_id} not found`
+                        });
+                    }
+                    
+                    validatedItems.push({
+                        food_id: item.food_id,
+                        quantity: item.quantity,
+                        price: price
+                    });
+                }
+                
+                await updateFoodOrderItems(id, validatedItems);
+            }
+            
+            // Users can update order place
+            if (order_place !== undefined) {
+                updateData.order_place = order_place;
+            }
+            
+            // Users can cancel order by setting status to 'cancelled'
+            if (order_status === 'cancelled') {
+                updateData.order_status = 'cancelled';
+            } else if (order_status && order_status !== 'pending') {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You can only cancel orders, not change status'
+                });
+            }
+        }
+        
+        // Admin updates (only status and payment)
+        if (isAdmin) {
+            if (order_status !== undefined) {
+                if (!['pending', 'preparing', 'delivered', 'cancelled'].includes(order_status)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid order status'
+                    });
+                }
+                updateData.order_status = order_status;
+            }
+            
+            if (payment_status !== undefined) {
+                if (!['paid', 'unpaid'].includes(payment_status)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Invalid payment status'
+                    });
+                }
+                updateData.payment_status = payment_status;
+            }
+            // Admin CANNOT update items or order_place
+        }
+
+        // Update order if there are changes
+        if (Object.keys(updateData).length > 0) {
+            await updateFoodOrder(id, updateData);
+        }
+
+        // Get updated order
+        const updatedOrder = await getFoodOrderByIdWithItems(id);
+
+        res.json({
+            success: true,
+            message: 'Food order updated successfully',
+            data: updatedOrder
+        });
+
+    } catch (error) {
+        console.error('Update food order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error updating food order',
+            error: error.message
+        });
     }
-    
-    const validStatuses = ['pending', 'preparing', 'ready', 'delivered', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      return sendError(res, `Invalid status. Valid statuses: ${validStatuses.join(', ')}`, 400);
-    }
-    
-    const existingOrder = await findFoodOrderById(id);
-    if (!existingOrder) {
-      return sendError(res, 'Food order not found', 404);
-    }
-    
-    const result = await updateFoodOrderStatus(id, status);
-    
-    if (!result.success) {
-      return sendError(res, 'Failed to update food order status', 400);
-    }
-    
-    const updatedOrder = await findFoodOrderById(id);
-    return sendSuccess(res, 'Food order status updated successfully', {
-      order_id: id,
-      new_status: status,
-      order: updatedOrder
-    });
-  } catch (error) {
-    console.error('Update food order status error:', error);
-    return sendError(res, 'Failed to update food order status', 500);
-  }
 };
 
-//  DELETE FOOD ORDER 
-const deleteFoodOrderHandler = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const existingOrder = await findFoodOrderById(id);
-    
-    if (!existingOrder) {
-      return sendError(res, 'Food order not found', 404);
+// 4. Delete/cancel food order
+const deleteFoodOrderController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const isAdmin = req.user.role === 'admin';
+        
+        // Check if order exists
+        const orderWithItems = await getFoodOrderByIdWithItems(id);
+        if (!orderWithItems.order) {
+            return res.status(404).json({
+                success: false,
+                message: 'Food order not found'
+            });
+        }
+
+        const currentStatus = orderWithItems.order.order_status;
+        
+        // Authorization check
+        if (!isAdmin) {
+            const ownsOrder = await checkFoodOrderOwnership(id, userId);
+            if (!ownsOrder) {
+                return res.status(403).json({
+                    success: false,
+                    message: 'You can only delete your own orders'
+                });
+            }
+            
+            // Users can only delete pending orders
+            if (currentStatus !== 'pending') {
+                return res.status(400).json({
+                    success: false,
+                    message: 'You can only delete orders with "pending" status'
+                });
+            }
+        }
+
+        // Delete order
+        await deleteFoodOrder(id);
+
+        res.json({
+            success: true,
+            message: 'Food order deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Delete food order error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error deleting food order',
+            error: error.message
+        });
     }
-    
-    const result = await deleteFoodOrder(id);
-    
-    if (!result.success) {
-      return sendError(res, 'Failed to delete food order', 400);
-    }
-    
-    return sendSuccess(res, 'Food order deleted successfully', {
-      order_id: id,
-      guest_name: `${existingOrder.guest_first_name} ${existingOrder.guest_last_name}`,
-      room_number: existingOrder.room_number
-    });
-  } catch (error) {
-    console.error('Delete food order error:', error);
-    return sendError(res, 'Failed to delete food order', 500);
-  }
 };
 
-//  GET FOOD ORDER STATISTICS 
-const getFoodOrderStatistics = async (req, res) => {
-  try {
-    const stats = await getFoodOrderStats();
-    
-    return sendSuccess(res, 'Food order statistics retrieved successfully', {
-      statistics: stats
-    });
-  } catch (error) {
-    console.error('Get food order statistics error:', error);
-    return sendError(res, 'Failed to retrieve food order statistics', 500);
-  }
+// 5. Get food order statistics (admin only)
+const getFoodOrderStatsController = async (req, res) => {
+    try {
+        const stats = await getFoodOrderStats();
+
+        res.json({
+            success: true,
+            message: 'Food order statistics retrieved',
+            data: stats
+        });
+
+    } catch (error) {
+        console.error('Get food order stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving food order statistics',
+            error: error.message
+        });
+    }
 };
 
-//  EXPORTS 
 module.exports = {
-  createFoodOrder: createFoodOrderHandler,
-  getAllFoodOrders: getAllFoodOrderHandler,
-  updateFoodOrder: updateFoodOrderHandler,
-  deleteFoodOrder: deleteFoodOrderHandler,
-  updateFoodOrderStatus: updateFoodOrderStatusHandler,
-  searchFoodOrders: searchFoodOrderHandler,
-  getFoodOrderStatistics
+    createFoodOrderController,
+    getFoodOrdersController,
+    updateFoodOrderController,
+    deleteFoodOrderController,
+    getFoodOrderStatsController
 };
