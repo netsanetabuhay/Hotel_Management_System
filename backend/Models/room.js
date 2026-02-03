@@ -1,293 +1,202 @@
-const { pool } = require('../Config/database');
+const { pool } = require('../Config/database.js');
 
-// CREATE - Add new room
+// Create new room
 const createRoom = async (roomData) => {
-  const sql = `
-    INSERT INTO rooms 
-      (room_id, room_number, room_type, price, status) 
-    VALUES 
-      (?, ?, ?, ?, ?)
-  `;
-  
-  const values = [
-    roomData.room_id,
-    roomData.room_number,
-    roomData.room_type,
-    roomData.price,
-    roomData.status || 'available'
-  ];
-
-  try {
-    const [result] = await pool.query(sql, values);
-    return { 
-      success: true, 
-      message: 'Room created successfully',
-      roomId: roomData.room_id 
-    };
-  } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      throw new Error('Room number already exists');
-    }
-    throw error;
-  }
+    const query = `
+        INSERT INTO rooms (room_id, room_number, room_type, price)
+        VALUES (?, ?, ?, ?)
+    `;
+    const [result] = await pool.execute(query, [
+        roomData.room_id,
+        roomData.room_number,
+        roomData.room_type,
+        roomData.price
+    ]);
+    return result;
 };
 
-// READ - Get all rooms with filters
-const findAllRooms = async (filters = {}) => {
-  let sql = 'SELECT * FROM rooms WHERE 1 = 1';
-  const values = [];
-
-  if (filters.room_type) {
-    sql += ' AND room_type = ?';
-    values.push(filters.room_type);
-  }
-  
-  if (filters.status) {
-    sql += ' AND status = ?';
-    values.push(filters.status);
-  }
-  
-  if (filters.min_price) {
-    sql += ' AND price >= ?';
-    values.push(filters.min_price);
-  }
-  
-  if (filters.max_price) {
-    sql += ' AND price <= ?';
-    values.push(filters.max_price);
-  }
-  
-  if (filters.search) {
-    sql += ' AND (room_number LIKE ? OR room_type LIKE ?)';
-    values.push(`%${filters.search}%`, `%${filters.search}%`);
-  }
-
-  sql += ' ORDER BY CAST(room_number AS UNSIGNED)';
-
-  try {
-    const [rows] = await pool.query(sql, values);
+// Get all available rooms
+const getAllRooms = async () => {
+    const query = `
+        SELECT room_id, room_number, room_type, price, status
+        FROM rooms 
+        WHERE status = 'available'
+        ORDER BY room_number
+    `;
+    const [rows] = await pool.execute(query);
     return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Get single room by ID
-const findRoomById = async (room_id) => {
-  const sql = 'SELECT * FROM rooms WHERE room_id = ?';
-  
-  try {
-    const [rows] = await pool.query(sql, [room_id]);
-    
-    if (rows.length === 0) {
-      return null;
-    }
-    
-    return rows[0];
-  } catch (error) {
-    throw error;
-  }
-};
-
-// READ - Get room by room number
-const findRoomByNumber = async (room_number) => {
-  const sql = 'SELECT * FROM rooms WHERE room_number = ?';
-  
-  try {
-    const [rows] = await pool.query(sql, [room_number]);
-    
-    if (rows.length === 0) {
-      return null;
-    }
-    
-    return rows[0];
-  } catch (error) {
-    throw error;
-  }
-};
-
-// UPDATE - Update room details
-const updateRoom = async (room_id, updateData) => {
-  const setClauses = [];
-  const values = [];
-
-  if (updateData.room_number !== undefined) {
-    setClauses.push('room_number = ?');
-    values.push(updateData.room_number);
-  }
-  
-  if (updateData.room_type !== undefined) {
-    setClauses.push('room_type = ?');
-    values.push(updateData.room_type);
-  }
-  
-  if (updateData.price !== undefined) {
-    setClauses.push('price = ?');
-    values.push(updateData.price);
-  }
-  
-  if (updateData.status !== undefined) {
-    setClauses.push('status = ?');
-    values.push(updateData.status);
-  }
-
-  if (setClauses.length === 0) {
-    return { 
-      success: false, 
-      message: 'No fields provided for update' 
-    };
-  }
-
-  values.push(room_id);
-
-  const sql = `
-    UPDATE rooms 
-    SET ${setClauses.join(', ')} 
-    WHERE room_id = ?
-  `;
-
-  try {
-    const [result] = await pool.query(sql, values);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Room updated successfully' : 'Room not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      throw new Error('Room number already exists');
-    }
-    throw error;
-  }
-};
-
-// DELETE - Remove room
-const deleteRoom = async (room_id) => {
-  const sql = 'DELETE FROM rooms WHERE room_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [room_id]);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Room deleted successfully' : 'Room not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    throw error;
-  }
-};
-
-// READ - Get available rooms only (DIFFERENT NAME: findAvailableRooms)
-const findAvailableRooms = async () => {
-  const query = `
-    SELECT *
-    FROM rooms
-    WHERE status = ?
-  `;
-
-  const status = 'available';
-
-  try {
-    const [rooms] = await pool.query(query, [status]);
-    return rooms;
-  } catch (error) {
-    console.error('Error fetching available rooms:', error.message);
-    throw new Error('Database error while fetching available rooms');
-  }
-};
-// const findAvailableRooms = async () => {
-//   const sql = "SELECT * FROM rooms WHERE status = ?";
-  
-//   try {
-//     const [rows] = await pool.query(sql, ['available']);
-//     console.log(rows);
-//     console.log("Above are the available rooms");
-//     return rows;
-//   } catch (error) {
-//     throw error;
-//   }
-// };
-
-// READ - Get rooms by specific status
-const findRoomsByStatus = async (status) => {
-  const sql = 'SELECT * FROM rooms WHERE status = ?';
-  
-  try {
-    const [rows] = await pool.query(sql, [status]);
+// Get room by ID
+const getRoomById = async (roomId) => {
+    const query = 'SELECT * FROM rooms WHERE room_id = ?';
+    const [rows] = await pool.execute(query, [roomId]);
     return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Get room statistics (count by type)
+// Check if room number exists
+const checkRoomNumberExists = async (roomNumber) => {
+    const query = 'SELECT room_id FROM rooms WHERE room_number = ?';
+    const [rows] = await pool.execute(query, [roomNumber]);
+    return rows;
+};
+
+// Check if room number exists excluding current room
+const checkRoomNumberExistsExcluding = async (roomNumber, excludeRoomId) => {
+    const query = 'SELECT room_id FROM rooms WHERE room_number = ? AND room_id != ?';
+    const [rows] = await pool.execute(query, [roomNumber, excludeRoomId]);
+    return rows;
+};
+
+// Search rooms with filters
+const searchRooms = async (filters) => {
+    let query = `
+        SELECT room_id, room_number, room_type, price, status
+        FROM rooms 
+        WHERE status = 'available'
+    `;
+    
+    const params = [];
+    
+    if (filters.room_number) {
+        query += ' AND room_number LIKE ?';
+        params.push(`%${filters.room_number}%`);
+    }
+    
+    if (filters.room_type) {
+        query += ' AND room_type = ?';
+        params.push(filters.room_type);
+    }
+    
+    if (filters.price_min) {
+        query += ' AND price >= ?';
+        params.push(filters.price_min);
+    }
+    
+    if (filters.price_max) {
+        query += ' AND price <= ?';
+        params.push(filters.price_max);
+    }
+    
+    query += ' ORDER BY price';
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+};
+
+// Update room
+const updateRoom = async (roomId, updateData) => {
+    const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(roomId);
+    
+    const query = `UPDATE rooms SET ${fields} WHERE room_id = ?`;
+    const [result] = await pool.execute(query, values);
+    return result;
+};
+
+// Delete room
+const deleteRoom = async (roomId) => {
+    const query = 'DELETE FROM rooms WHERE room_id = ?';
+    const [result] = await pool.execute(query, [roomId]);
+    return result;
+};
+
+// Check if room has active reservations
+const checkRoomReservations = async (roomId) => {
+    const query = `
+        SELECT room_order_id 
+        FROM room_orders 
+        WHERE room_id = ? 
+        AND (status = 'booked' OR status = 'active')
+        LIMIT 1
+    `;
+    const [rows] = await pool.execute(query, [roomId]);
+    return rows;
+};
+
+// Get room statistics
 const getRoomStats = async () => {
-  const sql = `
-    SELECT 
-      room_type,
-      COUNT(*) as total_rooms,
-      SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) as available_rooms,
-      AVG(price) as avg_price
-    FROM rooms 
-    GROUP BY room_type
-  `;
-  
-  try {
-    const [rows] = await pool.query(sql);
-    return rows;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// UPDATE - Only update room status
-const updateRoomStatus = async (room_id, new_status) => {
-  const sql = 'UPDATE rooms SET status = ? WHERE room_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [new_status, room_id]);
+    // Total available rooms
+    const totalQuery = "SELECT COUNT(*) as total FROM rooms WHERE status = 'available'";
+    const [totalResult] = await pool.execute(totalQuery);
     
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Room status updated' : 'Room not found',
-      affectedRows: result.affectedRows 
+    // Rooms by type
+    const typeQuery = `
+        SELECT room_type, COUNT(*) as count 
+        FROM rooms 
+        WHERE status = 'available'
+        GROUP BY room_type
+        ORDER BY count DESC
+    `;
+    const [typeResult] = await pool.execute(typeQuery);
+    
+    // Average price
+    const avgPriceQuery = "SELECT AVG(price) as avg_price FROM rooms WHERE status = 'available'";
+    const [avgPriceResult] = await pool.execute(avgPriceQuery);
+    
+    // Price range
+    const priceRangeQuery = "SELECT MIN(price) as min_price, MAX(price) as max_price FROM rooms WHERE status = 'available'";
+    const [priceRangeResult] = await pool.execute(priceRangeQuery);
+    
+    return {
+        total: totalResult[0]?.total || 0,
+        byType: typeResult,
+        averagePrice: avgPriceResult[0]?.avg_price || 0,
+        priceRange: {
+            min: priceRangeResult[0]?.min_price || 0,
+            max: priceRangeResult[0]?.max_price || 0
+        }
     };
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Check if room number exists
-const checkRoomNumberExists = async (room_number, exclude_room_id = null) => {
-  let sql = 'SELECT COUNT(*) as count FROM rooms WHERE room_number = ?';
-  const values = [room_number];
-  
-  if (exclude_room_id) {
-    sql += ' AND room_id != ?';
-    values.push(exclude_room_id);
-  }
-  
-  try {
-    const [rows] = await pool.query(sql, values);
-    return rows[0].count > 0;
-  } catch (error) {
-    throw error;
-  }
+// Get revenue statistics from room orders
+const getRevenueStats = async () => {
+    // Total revenue from completed bookings
+    const revenueQuery = `
+        SELECT 
+            SUM(r.price) as total_revenue,
+            COUNT(*) as total_bookings,
+            AVG(r.price) as avg_booking_value
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        WHERE ro.status = 'completed' AND ro.payment_status = 'paid'
+    `;
+    const [revenueResult] = await pool.execute(revenueQuery);
+    
+    // Most booked room type
+    const popularTypeQuery = `
+        SELECT 
+            r.room_type,
+            COUNT(*) as booking_count,
+            SUM(r.price) as revenue
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        WHERE ro.status = 'completed'
+        GROUP BY r.room_type
+        ORDER BY booking_count DESC
+        LIMIT 5
+    `;
+    const [popularTypeResult] = await pool.execute(popularTypeQuery);
+    
+    return {
+        totalRevenue: revenueResult[0]?.total_revenue || 0,
+        totalBookings: revenueResult[0]?.total_bookings || 0,
+        averageBookingValue: revenueResult[0]?.avg_booking_value || 0,
+        popularRoomTypes: popularTypeResult
+    };
 };
 
-// Literal exports
 module.exports = {
-  createRoom,
-  findAllRooms,
-  findRoomById,
-  findRoomByNumber,
-  updateRoom,
-  deleteRoom,
-  findAvailableRooms,  // Changed name to avoid conflict
-  findRoomsByStatus,
-  getRoomStats,
-  updateRoomStatus,
-  checkRoomNumberExists
+    createRoom,
+    getAllRooms,
+    getRoomById,
+    checkRoomNumberExists,
+    checkRoomNumberExistsExcluding,
+    searchRooms,
+    updateRoom,
+    deleteRoom,
+    checkRoomReservations,
+    getRoomStats,
+    getRevenueStats
 };

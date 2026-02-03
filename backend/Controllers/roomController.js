@@ -1,340 +1,278 @@
-// Literal imports from Models
 const {
-  createRoom: createRoomModel,
-  findAllRooms,
-  findRoomById,
-  findRoomByNumber,
-  updateRoom: updateRoomModel,
-  deleteRoom: deleteRoomModel,
-  findAvailableRooms,
-  findRoomsByStatus,
-  getRoomStats,
-  updateRoomStatus: updateRoomStatusModel,
-  checkRoomNumberExists
-} = require('../Models/room');
+    createRoom,
+    getAllRooms,
+    getRoomById,
+    checkRoomNumberExists,
+    checkRoomNumberExistsExcluding,
+    searchRooms,
+    updateRoom,
+    deleteRoom,
+    checkRoomReservations,
+    getRoomStats,
+    getRevenueStats
+} = require('../Models/room.js');
 
-const { generateId } = require('../Utils/generateId');
-const { sendSuccess, sendError } = require('../Utils/response');
+// Create new room (Admin only)
+const createRoomController = async (req, res) => {
+    try {
+        const { room_number, room_type, price } = req.body;
 
-// Create a new room
-const createRoom = async (req, res) => {
-  try {
-    const { room_number, room_type, price, status } = req.body;
-    
-    if (!room_number || !room_type || !price) {
-      return sendError(res, 'Room number, type and price are required', 400);
+        // Validation
+        if (!room_number || !room_type || !price) {
+            return res.status(400).json({
+                success: false,
+                message: 'Room number, room type, and price are required'
+            });
+        }
+
+        // Check if room number already exists
+        const existingRoom = await checkRoomNumberExists(room_number);
+        if (existingRoom.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Room number already exists'
+            });
+        }
+
+        // Validate price
+        if (price <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Price must be greater than 0'
+            });
+        }
+
+        // Generate room ID
+        const roomId = 'RM' + Date.now();
+
+        // Prepare room data
+        const roomData = {
+            room_id: roomId,
+            room_number,
+            room_type,
+            price: parseFloat(price)
+        };
+
+        // Create room in database
+        await createRoom(roomData);
+
+        // Get created room
+        const createdRoom = await getRoomById(roomId);
+        const room = createdRoom[0];
+
+        res.status(201).json({
+            success: true,
+            message: 'Room created successfully',
+            data: room
+        });
+
+    } catch (error) {
+        console.error('Create room error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error creating room',
+            error: error.message
+        });
     }
-    
-    const existingRoom = await findRoomByNumber(room_number);
-    if (existingRoom) {
-      return sendError(res, 'Room number already exists', 409);
-    }
-    
-    const room_id = generateId('RM');
-    
-    const roomData = {
-      room_id,
-      room_number,
-      room_type,
-      price: parseFloat(price),
-      status: status || 'available'
-    };
-    
-    const result = await createRoomModel(roomData);
-    
-    return sendSuccess(res, 'Room created successfully', {
-      room_id,
-      room_number,
-      room_type,
-      price: roomData.price,
-      status: roomData.status
-    }, 201);
-    
-  } catch (error) {
-    console.error('Create room error:', error);
-    return sendError(res, 'Failed to create room: ' + error.message, 500);
-  }
 };
 
-// Get all rooms (with optional filters)
-const getAllRooms = async (req, res) => {
-  try {
-    const filters = {
-      room_type: req.query.room_type,
-      status: req.query.status,
-      min_price: req.query.min_price ? parseFloat(req.query.min_price) : undefined,
-      max_price: req.query.max_price ? parseFloat(req.query.max_price) : undefined,
-      search: req.query.search
-    };
-    
-    Object.keys(filters).forEach(key => {
-      if (filters[key] === undefined) {
-        delete filters[key];
-      }
-    });
-    
-    const rooms = await findAllRooms(filters);
-    
-    return sendSuccess(res, 'Rooms retrieved successfully', {
-      count: rooms.length,
-      rooms
-    });
-    
-  } catch (error) {
-    console.error('Get all rooms error:', error);
-    return sendError(res, 'Failed to retrieve rooms', 500);
-  }
-};
+// Get all available rooms
+const getAllRoomsController = async (req, res) => {
+    try {
+        const rooms = await getAllRooms();
 
-// Get single room by ID
-const getRoomById = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const room = await findRoomById(id);
-    
-    if (!room) {
-      return sendError(res, 'Room not found', 404);
-    }
-    
-    return sendSuccess(res, 'Room retrieved successfully', room);
-    
-  } catch (error) {
-    console.error('Get room by ID error:', error);
-    return sendError(res, 'Failed to retrieve room', 500);
-  }
-};
+        res.json({
+            success: true,
+            message: 'Rooms retrieved successfully',
+            data: rooms
+        });
 
-// Get room by room number
-const getRoomByNumber = async (req, res) => {
-  try {
-    const { room_number } = req.params;
-    
-    const room = await findRoomByNumber(room_number);
-    
-    if (!room) {
-      return sendError(res, 'Room not found', 404);
+    } catch (error) {
+        console.error('Get all rooms error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving rooms',
+            error: error.message
+        });
     }
-    
-    return sendSuccess(res, 'Room retrieved successfully', room);
-    
-  } catch (error) {
-    console.error('Get room by number error:', error);
-    return sendError(res, 'Failed to retrieve room', 500);
-  }
-};
-
-// Update room details
-const updateRoom = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-    
-    const existingRoom = await findRoomById(id);
-    if (!existingRoom) {
-      return sendError(res, 'Room not found', 404);
-    }
-    
-    if (updateData.room_number && updateData.room_number !== existingRoom.room_number) {
-      const roomWithNumber = await findRoomByNumber(updateData.room_number);
-      if (roomWithNumber && roomWithNumber.room_id !== id) {
-        return sendError(res, 'Room number already exists', 409);
-      }
-    }
-    
-    if (updateData.price !== undefined) {
-      updateData.price = parseFloat(updateData.price);
-    }
-    
-    const result = await updateRoomModel(id, updateData);
-    
-    if (!result.success) {
-      return sendError(res, result.message || 'Failed to update room', 400);
-    }
-    
-    const updatedRoom = await findRoomById(id);
-    
-    return sendSuccess(res, 'Room updated successfully', updatedRoom);
-    
-  } catch (error) {
-    console.error('Update room error:', error);
-    return sendError(res, 'Failed to update room: ' + error.message, 500);
-  }
-};
-
-// Delete room
-const deleteRoom = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const existingRoom = await findRoomById(id);
-    if (!existingRoom) {
-      return sendError(res, 'Room not found', 404);
-    }
-    
-    const result = await deleteRoomModel(id);
-    
-    if (!result.success) {
-      return sendError(res, 'Failed to delete room', 400);
-    }
-    
-    return sendSuccess(res, 'Room deleted successfully', {
-      room_id: id,
-      room_number: existingRoom.room_number
-    });
-    
-  } catch (error) {
-    console.error('Delete room error:', error);
-    return sendError(res, 'Failed to delete room', 500);
-  }
-};
-
-// Get available rooms
-// GET available rooms
-const getAvailableRooms = async (req, res) => {
-  try {
-    const availableRooms = await findAvailableRooms();
-
-    // Case 1: No rooms
-    if (availableRooms.length === 0) {
-      return sendSuccess(res, 'No available rooms found', {
-        count: 0,
-        rooms: []
-      });
-    }
-
-    // ✅ Case 2: Rooms found (THIS WAS MISSING)
-    return sendSuccess(res, 'Available rooms fetched successfully', {
-      count: availableRooms.length,
-      rooms: availableRooms
-    });
-
-  } catch (error) {
-    console.error(error);
-    return sendError(res, 'Failed to fetch available rooms');
-  }
-};
-
-// const getAvailableRooms = async (req, res) => {
-//   try {
-//     const availableRooms = await findAvailableRooms();
-//     console.log(availableRooms);
-
-    
-//     if (availableRooms.length === 0) {
-//       return sendSuccess(res, 'No available rooms found', {
-//         count: 0,
-//         rooms: []
-//       });
-//     }
-    
-//     return sendSuccess(res, 'Available rooms retrieved successfully', {
-//       count: availableRooms.length,
-//       rooms: availableRooms
-//     });
-    
-//   } catch (error) {
-//     console.error('Get available rooms error:', error);
-//     return sendError(res, 'Failed to retrieve available rooms: ' + error.message, 500);
-//   }
-// };
-
-// Get room statistics
-const getRoomStatistics = async (req, res) => {
-  try {
-    const stats = await getRoomStats();
-    
-    const totals = stats.reduce((acc, stat) => {
-      acc.total_rooms += parseInt(stat.total_rooms);
-      acc.available_rooms += parseInt(stat.available_rooms);
-      return acc;
-    }, { total_rooms: 0, available_rooms: 0 });
-    
-    return sendSuccess(res, 'Room statistics retrieved successfully', {
-      totals,
-      by_type: stats
-    });
-    
-  } catch (error) {
-    console.error('Get room statistics error:', error);
-    return sendError(res, 'Failed to retrieve room statistics', 500);
-  }
-};
-
-// Update room status only
-const updateRoomStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    if (!status) {
-      return sendError(res, 'Status is required', 400);
-    }
-    
-    const existingRoom = await findRoomById(id);
-    if (!existingRoom) {
-      return sendError(res, 'Room not found', 404);
-    }
-    
-    const validStatuses = ['available', 'occupied', 'maintenance', 'cleaning', 'reserved'];
-    if (!validStatuses.includes(status)) {
-      return sendError(res, `Invalid status. Valid statuses: ${validStatuses.join(', ')}`, 400);
-    }
-    
-    const result = await updateRoomStatusModel(id, status);
-    
-    if (!result.success) {
-      return sendError(res, 'Failed to update room status', 400);
-    }
-    
-    const updatedRoom = await findRoomById(id);
-    
-    return sendSuccess(res, 'Room status updated successfully', {
-      room_id: id,
-      room_number: updatedRoom.room_number,
-      old_status: existingRoom.status,
-      new_status: status
-    });
-    
-  } catch (error) {
-    console.error('Update room status error:', error);
-    return sendError(res, 'Failed to update room status', 500);
-  }
 };
 
 // Search rooms
-const searchRooms = async (req, res) => {
-  try {
-    const { q } = req.query;
-    
-    if (!q) {
-      return sendError(res, 'Search query is required', 400);
+const searchRoomsController = async (req, res) => {
+    try {
+        const { room_number, room_type, price_min, price_max } = req.query;
+        
+        const filters = {};
+        
+        if (room_number) filters.room_number = room_number;
+        if (room_type) filters.room_type = room_type;
+        if (price_min) filters.price_min = parseFloat(price_min);
+        if (price_max) filters.price_max = parseFloat(price_max);
+        
+        const rooms = await searchRooms(filters);
+
+        res.json({
+            success: true,
+            message: 'Search results retrieved',
+            data: rooms
+        });
+
+    } catch (error) {
+        console.error('Search rooms error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error searching rooms',
+            error: error.message
+        });
     }
-    
-    const rooms = await findAllRooms({ search: q });
-    
-    return sendSuccess(res, 'Search results retrieved successfully', {
-      count: rooms.length,
-      query: q,
-      rooms
-    });
-    
-  } catch (error) {
-    console.error('Search rooms error:', error);
-    return sendError(res, 'Failed to search rooms', 500);
-  }
 };
 
-// Literal exports
+// Update room (Admin only)
+const updateRoomController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { room_number, room_type, price } = req.body;
+        
+        // Check if room exists
+        const rooms = await getRoomById(id);
+        if (rooms.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Room not found'
+            });
+        }
+
+        const existingRoom = rooms[0];
+        const updateData = {};
+        
+        // Prepare update data
+        if (room_number !== undefined) {
+            // Check if new room number already exists (excluding current room)
+            const existingRoomNumber = await checkRoomNumberExistsExcluding(room_number, id);
+            if (existingRoomNumber.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Room number already exists'
+                });
+            }
+            updateData.room_number = room_number;
+        }
+        
+        if (room_type !== undefined) {
+            updateData.room_type = room_type;
+        }
+        
+        if (price !== undefined) {
+            if (price <= 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Price must be greater than 0'
+                });
+            }
+            updateData.price = parseFloat(price);
+        }
+
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No fields to update'
+            });
+        }
+
+        // Update room
+        await updateRoom(id, updateData);
+
+        // Get updated room
+        const updatedRooms = await getRoomById(id);
+        const updatedRoom = updatedRooms[0];
+
+        res.json({
+            success: true,
+            message: 'Room updated successfully',
+            data: updatedRoom
+        });
+
+    } catch (error) {
+        console.error('Update room error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error updating room',
+            error: error.message
+        });
+    }
+};
+
+// Delete room (Admin only)
+const deleteRoomController = async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // Check if room exists
+        const rooms = await getRoomById(id);
+        if (rooms.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Room not found'
+            });
+        }
+
+        // Check if room has active reservations
+        const activeReservations = await checkRoomReservations(id);
+        if (activeReservations.length > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Cannot delete room with active reservations'
+            });
+        }
+
+        // Delete room
+        await deleteRoom(id);
+
+        res.json({
+            success: true,
+            message: 'Room deleted successfully'
+        });
+
+    } catch (error) {
+        console.error('Delete room error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error deleting room',
+            error: error.message
+        });
+    }
+};
+
+// Get room statistics (Admin only)
+const getRoomStatsController = async (req, res) => {
+    try {
+        const roomStats = await getRoomStats();
+        const revenueStats = await getRevenueStats();
+
+        res.json({
+            success: true,
+            message: 'Room statistics retrieved',
+            data: {
+                roomStats,
+                revenueStats
+            }
+        });
+
+    } catch (error) {
+        console.error('Get room stats error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Server error retrieving room statistics',
+            error: error.message
+        });
+    }
+};
+
 module.exports = {
-  createRoom,
-  getAllRooms,
-  getRoomById,
-  getRoomByNumber,
-  updateRoom,
-  deleteRoom,
-  getAvailableRooms,
-  getRoomStatistics,
-  updateRoomStatus,
-  searchRooms
+    createRoomController,
+    getAllRoomsController,
+    searchRoomsController,
+    updateRoomController,
+    deleteRoomController,
+    getRoomStatsController
 };

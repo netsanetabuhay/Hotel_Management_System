@@ -25,21 +25,21 @@ router.get('/available-rooms', findAvailableRooms);
 //  PROTECTED ROUTES 
 
 // Create new reservation
-router.post('/', authenticate, authorize(['admin', 'manager', 'receptionist']), createReservation);
+router.post('/', authenticate, authorize(['admin', 'use']), createReservation);
 
 // Get all reservations
-router.get('/', authenticate, authorize(['admin', 'manager', 'receptionist', 'housekeeping']), getAllReservations);
+router.get('/', authenticate, authorize(['admin', 'user']), getAllReservations);
 
 // SMART UNIFIED SEARCH - ONE route for ALL searches
 router.get('/search/:identifier', searchReservations);
 
 // Update reservation
-router.put('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), updateReservation);
+router.put('/:id', authenticate, authorize(['admin', 'user']), updateReservation);
 
 // Update reservation status
-router.patch('/:id/status', authenticate, authorize(['admin', 'manager', 'receptionist']), updateReservationStatus);
+router.patch('/:id/status', authenticate, authorize(['admin', 'user']), updateReservationStatus);
 
 // Delete reservation
-router.delete('/:id', authenticate, authorize(['admin', 'manager', 'receptionist']), deleteReservation);
+router.delete('/:id', authenticate, authorize(['admin', 'user']), deleteReservation);
 
 module.exports = router;

@@ -8,7 +8,7 @@ const mysql = require('mysql2');
 
 // // 2. ROUTE IMPORTS
 const userRoutes = require('./Routes/userRoutes');
-// const roomRoutes = require('./Routes/roomRoutes');
+const roomRoutes = require('./Routes/roomRoutes');
 // const roomOrderRoutes = require('./Routes/roomOrderRoutes');
 // const foodItemRoutes = require('./Routes/foodItemRoutes');
 // const foodOrderRoutes = require('./Routes/foodOrderRoutes');

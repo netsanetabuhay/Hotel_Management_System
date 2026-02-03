@@ -9,38 +9,25 @@ const {
   checkRoomAvailability,
   findAvailableRooms
 } = require('../Models/reservation');
+// const {sendSuccess, sendError} =require('../Middleware/sendResponse');
 
 const { generateId } = require('../Utils/generateId');
+const {response} =require('../Utils/response');
 const { findGuestById } = require('../Models/guest');
 const { findRoomById } = require('../Models/room');
 
-// Helper response functions
-const sendSuccess = (res, message, data = null, statusCode = 200) => {
-  return res.status(statusCode).json({
-    success: true,
-    message,
-    data
-  });
-};
-
-const sendError = (res, message, statusCode = 500) => {
-  return res.status(statusCode).json({
-    success: false,
-    message
-  });
-};
 
 // CREATE RESERVATION
 const createReservationHandler = async (req, res) => {
   try {
-    const guest_id = req.body.guest_id;
+    const user_id = req.body.user_id;
     const room_id = req.body.room_id;
     const check_in = req.body.check_in;
     const check_out = req.body.check_out;
-    const status = req.body.status;
+    const status = req.body.status|| 'booked';
     
-    if (!guest_id || !room_id || !check_in || !check_out) {
-      return sendError(res, 'guest_id, room_id, check_in, and check_out are required', 400);
+    if (!user_id || !room_id || !check_in || !check_out) {
+      return sendError(res, 'user_id, room_id, check_in, and check_out are required', 400);
     }
     
     const checkInDate = new Date(check_in);
