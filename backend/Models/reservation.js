@@ -1,344 +1,253 @@
 const { pool } = require('../Config/database');
 
-// CREATE - Create new reservation
+// 1. Create new reservation
 const createReservation = async (reservationData) => {
-  const sql = `INSERT INTO reservations (reservation_id, guest_id, room_id, check_in, check_out, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-  
-  try {
-    const [result] = await pool.query(sql, [
-      reservationData.reservation_id,
-      reservationData.guest_id,
-      reservationData.room_id,
-      reservationData.check_in,
-      reservationData.check_out,
-      reservationData.status || 'confirmed',
-      reservationData.created_at || new Date()
+    const query = `
+        INSERT INTO room_orders 
+        (room_order_id, user_id, room_id, check_in, check_out, status, payment_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    const [result] = await pool.execute(query, [
+        reservationData.room_order_id,
+        reservationData.user_id,
+        reservationData.room_id,
+        reservationData.check_in,
+        reservationData.check_out,
+        reservationData.status || 'booked',
+        reservationData.payment_status || 'paid'
     ]);
-    
-    return { 
-      success: true, 
-      message: 'Reservation created successfully',
-      reservationId: reservationData.reservation_id 
-    };
-  } catch (error) {
-    console.error('Create reservation error:', error);
-    throw error;
-  }
+    return result;
 };
 
-// READ - Get all reservations with filters
-const findAllReservations = async (filters = {}) => {
-  let sql = `SELECT r.*, g.first_name, g.last_name, g.email, g.phone, rm.room_number, rm.room_type, rm.price FROM reservations r LEFT JOIN guests g ON r.guest_id = g.guest_id LEFT JOIN rooms rm ON r.room_id = rm.room_id WHERE 1 = 1`;
-  
-  const values = [];
-
-  if (filters.guest_id) {
-    sql += ' AND r.guest_id = ?';
-    values.push(filters.guest_id);
-  }
-  
-  if (filters.room_id) {
-    sql += ' AND r.room_id = ?';
-    values.push(filters.room_id);
-  }
-  
-  if (filters.status) {
-    sql += ' AND r.status = ?';
-    values.push(filters.status);
-  }
-  
-  if (filters.check_in) {
-    sql += ' AND r.check_in >= ?';
-    values.push(filters.check_in);
-  }
-  
-  if (filters.check_out) {
-    sql += ' AND r.check_out <= ?';
-    values.push(filters.check_out);
-  }
-
-  sql += ' ORDER BY r.created_at DESC';
-
-  try {
-    const [rows] = await pool.query(sql, values);
+// 2. Get reservations with filters
+const getReservations = async (filters = {}, userId = null, isAdmin = false) => {
+    let query = `
+        SELECT 
+            ro.*,
+            r.room_number,
+            r.room_type,
+            r.price,
+            u.username,
+            u.email
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        JOIN users u ON ro.user_id = u.user_id
+        WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    // User restriction: non-admin users only see their own reservations
+    if (!isAdmin && userId) {
+        query += ' AND ro.user_id = ?';
+        params.push(userId);
+    }
+    
+    // Apply filters
+    if (filters.status) {
+        query += ' AND ro.status = ?';
+        params.push(filters.status);
+    }
+    
+    if (filters.payment_status) {
+        query += ' AND ro.payment_status = ?';
+        params.push(filters.payment_status);
+    }
+    
+    if (filters.check_in_from) {
+        query += ' AND ro.check_in >= ?';
+        params.push(filters.check_in_from);
+    }
+    
+    if (filters.check_in_to) {
+        query += ' AND ro.check_in <= ?';
+        params.push(filters.check_in_to);
+    }
+    
+    if (filters.check_out_from) {
+        query += ' AND ro.check_out >= ?';
+        params.push(filters.check_out_from);
+    }
+    
+    if (filters.check_out_to) {
+        query += ' AND ro.check_out <= ?';
+        params.push(filters.check_out_to);
+    }
+    
+    // Admin-only filters
+    if (isAdmin) {
+        if (filters.room_id) {
+            query += ' AND ro.room_id = ?';
+            params.push(filters.room_id);
+        }
+        
+        if (filters.user_id) {
+            query += ' AND ro.user_id = ?';
+            params.push(filters.user_id);
+        }
+    }
+    
+    query += ' ORDER BY ro.created_at DESC';
+    
+    const [rows] = await pool.execute(query, params);
     return rows;
-  } catch (error) {
-    console.error('Find all reservations error:', error);
-    throw error;
-  }
 };
 
-// READ - Get single reservation by ID
-const findReservationById = async (reservation_id) => {
-  const sql = `SELECT r.*, g.first_name, g.last_name, g.email, g.phone, rm.room_number, rm.room_type, rm.price FROM reservations r LEFT JOIN guests g ON r.guest_id = g.guest_id LEFT JOIN rooms rm ON r.room_id = rm.room_id WHERE r.reservation_id = ?`;
-  
-  try {
-    const [rows] = await pool.query(sql, [reservation_id]);
-    
-    if (rows.length === 0) {
-      return null;
-    }
-    
-    return rows[0];
-  } catch (error) {
-    console.error('Find reservation by ID error:', error);
-    throw error;
-  }
-};
-
-// READ - Get reservations by guest ID
-const findReservationsByGuestId = async (guest_id) => {
-  const sql = `SELECT r.*, rm.room_number, rm.room_type, rm.price FROM reservations r LEFT JOIN rooms rm ON r.room_id = rm.room_id WHERE r.guest_id = ? ORDER BY r.created_at DESC`;
-  
-  try {
-    const [rows] = await pool.query(sql, [guest_id]);
+// 3. Get reservation by ID
+const getReservationById = async (reservationId) => {
+    const query = `
+        SELECT 
+            ro.*,
+            r.room_number,
+            r.room_type,
+            r.price,
+            u.username,
+            u.email
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        JOIN users u ON ro.user_id = u.user_id
+        WHERE ro.room_order_id = ?
+    `;
+    const [rows] = await pool.execute(query, [reservationId]);
     return rows;
-  } catch (error) {
-    console.error('Find reservations by guest error:', error);
-    throw error;
-  }
 };
 
-// READ - Get reservations by room ID
-const findReservationsByRoomId = async (room_id) => {
-  const sql = `SELECT r.*, g.first_name, g.last_name, g.email, g.phone FROM reservations r LEFT JOIN guests g ON r.guest_id = g.guest_id WHERE r.room_id = ? ORDER BY r.check_in DESC`;
-  
-  try {
-    const [rows] = await pool.query(sql, [room_id]);
-    return rows;
-  } catch (error) {
-    console.error('Find reservations by room error:', error);
-    throw error;
-  }
+// 4. Update reservation
+const updateReservation = async (reservationId, updateData) => {
+    const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(reservationId);
+    
+    const query = `UPDATE room_orders SET ${fields} WHERE room_order_id = ?`;
+    const [result] = await pool.execute(query, values);
+    return result;
 };
 
-// SMART UNIFIED SEARCH - ONE function for all
-const findReservationsByIdentifier = async (identifier) => {
-  // Check if it's a reservation ID (starts with RES)
-  if (identifier.startsWith('RES')) {
-    const reservation = await findReservationById(identifier);
-    if (reservation) {
-      return { type: 'reservation', data: [reservation] };
-    }
-  }
-  
-  // Check if it's a guest ID (starts with GST or GUEST)
-  if (identifier.startsWith('GST') || identifier.startsWith('GUEST')) {
-    const reservations = await findReservationsByGuestId(identifier);
-    return { type: 'guest', data: reservations };
-  }
-  
-  // Check if it's a room ID (starts with RM)
-  if (identifier.startsWith('RM')) {
-    const reservations = await findReservationsByRoomId(identifier);
-    return { type: 'room', data: reservations };
-  }
-  
-  return { type: 'unknown', data: [] };
+// 5. Delete reservation
+const deleteReservation = async (reservationId) => {
+    const query = 'DELETE FROM room_orders WHERE room_order_id = ?';
+    const [result] = await pool.execute(query, [reservationId]);
+    return result;
 };
 
-// UPDATE - Update reservation details
-const updateReservation = async (reservation_id, updateData) => {
-  const setClauses = [];
-  const values = [];
-
-  if (updateData.guest_id !== undefined) {
-    setClauses.push('guest_id = ?');
-    values.push(updateData.guest_id);
-  }
-  
-  if (updateData.room_id !== undefined) {
-    setClauses.push('room_id = ?');
-    values.push(updateData.room_id);
-  }
-  
-  if (updateData.check_in !== undefined) {
-    setClauses.push('check_in = ?');
-    values.push(updateData.check_in);
-  }
-  
-  if (updateData.check_out !== undefined) {
-    setClauses.push('check_out = ?');
-    values.push(updateData.check_out);
-  }
-  
-  if (updateData.status !== undefined) {
-    setClauses.push('status = ?');
-    values.push(updateData.status);
-  }
-
-  if (setClauses.length === 0) {
-    return { 
-      success: false, 
-      message: 'No fields provided for update' 
-    };
-  }
-
-  values.push(reservation_id);
-
-  const sql = `UPDATE reservations SET ${setClauses.join(', ')} WHERE reservation_id = ?`;
-
-  try {
-    const [result] = await pool.query(sql, values);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Reservation updated successfully' : 'Reservation not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Update reservation error:', error);
-    throw error;
-  }
+// 6. Check if user owns the reservation
+const checkReservationOwnership = async (reservationId, userId) => {
+    const query = 'SELECT room_order_id FROM room_orders WHERE room_order_id = ? AND user_id = ?';
+    const [rows] = await pool.execute(query, [reservationId, userId]);
+    return rows.length > 0;
 };
 
-// UPDATE - Only update reservation status
-const updateReservationStatus = async (reservation_id, status) => {
-  const sql = 'UPDATE reservations SET status = ? WHERE reservation_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [status, reservation_id]);
+// 7. Get reservation statistics
+const getReservationStats = async () => {
+    // Total reservations by status
+    const statusQuery = `
+        SELECT 
+            status,
+            COUNT(*) as count,
+            SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) as paid_count
+        FROM room_orders 
+        GROUP BY status
+        ORDER BY status
+    `;
+    const [statusResult] = await pool.execute(statusQuery);
     
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Reservation status updated' : 'Reservation not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Update reservation status error:', error);
-    throw error;
-  }
-};
-
-// DELETE - Cancel/delete reservation
-const deleteReservation = async (reservation_id) => {
-  const sql = 'DELETE FROM reservations WHERE reservation_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [reservation_id]);
+    // Monthly revenue
+    const monthlyRevenueQuery = `
+        SELECT 
+            DATE_FORMAT(ro.created_at, '%Y-%m') as month,
+            COUNT(*) as bookings,
+            SUM(r.price) as revenue
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        WHERE ro.status = 'completed' AND ro.payment_status = 'paid'
+        GROUP BY DATE_FORMAT(ro.created_at, '%Y-%m')
+        ORDER BY month DESC
+        LIMIT 6
+    `;
+    const [monthlyRevenueResult] = await pool.execute(monthlyRevenueQuery);
     
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Reservation cancelled successfully' : 'Reservation not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Delete reservation error:', error);
-    throw error;
-  }
-};
-
-// CHECK - Room availability
-// CHECK - Room availability by room_id only (current status)
-// CHECK - Room availability with specific dates
-// CHECK - Room availability with specific dates
-const checkRoomAvailability = async (room_id, check_in, check_out) => {
-  console.log('Checking availability for:', { room_id, check_in, check_out });
-  
-  const sql = `
-    SELECT 
-      CASE 
-        WHEN NOT EXISTS (SELECT 1 FROM rooms WHERE room_id = ?) THEN 'Room not found'
-        WHEN r.status != 'available' THEN 'Room status is not available'
-        WHEN EXISTS (
-          SELECT 1 FROM reservations res 
-          WHERE res.room_id = ? 
-          AND res.status IN ('confirmed', 'checked_in')
-          AND (
-            (res.check_in <= ? AND res.check_out >= ?) 
-            OR (res.check_in <= ? AND res.check_out >= ?) 
-            OR (res.check_in >= ? AND res.check_out <= ?)
-          )
-        ) THEN 'Room is booked for selected dates'
-        ELSE 'Room is available for selected dates'
-      END as availability_status,
-      r.status as room_status,
-      r.room_number,
-      r.room_type,
-      r.price
-    FROM rooms r
-    WHERE r.room_id = ?
-  `;
-  
-  console.log('SQL:', sql);
-  console.log('Parameters:', [room_id, room_id, check_out, check_in, check_in, check_out, check_in, check_out, room_id]);
-  
-  try {
-    const [rows] = await pool.query(sql, [
-      room_id,        // For room exists check
-      room_id,        // For reservation check
-      check_out,      // For reservation check (res.check_in <= check_out)
-      check_in,       // For reservation check (res.check_out >= check_in)
-      check_in,       // For reservation check (res.check_in <= check_in)
-      check_out,      // For reservation check (res.check_out >= check_out)
-      check_in,       // For reservation check (res.check_in >= check_in)
-      check_out,      // For reservation check (res.check_out <= check_out)
-      room_id         // For room query
-    ]);
+    // Most booked rooms
+    const popularRoomsQuery = `
+        SELECT 
+            r.room_id,
+            r.room_number,
+            r.room_type,
+            COUNT(*) as booking_count,
+            SUM(r.price) as total_revenue
+        FROM room_orders ro
+        JOIN rooms r ON ro.room_id = r.room_id
+        WHERE ro.status = 'completed'
+        GROUP BY r.room_id, r.room_number, r.room_type
+        ORDER BY booking_count DESC
+        LIMIT 10
+    `;
+    const [popularRoomsResult] = await pool.execute(popularRoomsQuery);
     
-    console.log('Query result:', rows);
+    // Average stay duration
+    const avgStayQuery = `
+        SELECT 
+            AVG(DATEDIFF(check_out, check_in)) as avg_stay_days
+        FROM room_orders 
+        WHERE status = 'completed'
+    `;
+    const [avgStayResult] = await pool.execute(avgStayQuery);
     
-    if (rows.length === 0) {
-      return { available: false, message: 'Room not found' };
-    }
+    // Today's check-ins and check-outs
+    const today = new Date().toISOString().split('T')[0];
+    const todaysCheckInsQuery = `
+        SELECT COUNT(*) as todays_checkins
+        FROM room_orders 
+        WHERE DATE(check_in) = ?
+    `;
+    const [todaysCheckInsResult] = await pool.execute(todaysCheckInsQuery, [today]);
     
-    const row = rows[0];
-    console.log('Row data:', row);
-    
-    if (row.availability_status === 'Room not found') {
-      return { available: false, message: 'Room not found' };
-    }
-    
-    const isAvailable = row.availability_status === 'Room is available for selected dates';
+    const todaysCheckOutsQuery = `
+        SELECT COUNT(*) as todays_checkouts
+        FROM room_orders 
+        WHERE DATE(check_out) = ?
+    `;
+    const [todaysCheckOutsResult] = await pool.execute(todaysCheckOutsQuery, [today]);
     
     return {
-      available: isAvailable,
-      message: row.availability_status,
-      room_status: row.room_status,
-      room_number: row.room_number,
-      room_type: row.room_type,
-      price: row.price
+        byStatus: statusResult,
+        monthlyRevenue: monthlyRevenueResult,
+        popularRooms: popularRoomsResult,
+        averageStayDays: avgStayResult[0]?.avg_stay_days || 0,
+        todaysCheckIns: todaysCheckInsResult[0]?.todays_checkins || 0,
+        todaysCheckOuts: todaysCheckOutsResult[0]?.todays_checkouts || 0
     };
-  } catch (error) {
-    console.error('Check room availability error:', error);
-    console.error('Error details:', error.message);
-    throw error;
-  }
 };
 
-// CHECK - Available rooms for dates
-const findAvailableRooms = async (check_in, check_out, room_type = null) => {
-  let sql = `SELECT r.* FROM rooms r WHERE r.status = 'available' AND r.room_id NOT IN (SELECT res.room_id FROM reservations res WHERE res.status IN ('confirmed', 'checked_in') AND ((res.check_in <= ? AND res.check_out >= ?) OR (res.check_in <= ? AND res.check_out >= ?) OR (res.check_in >= ? AND res.check_out <= ?)))`;
-  
-  const values = [check_out, check_in, check_in, check_out, check_in, check_out];
-  
-  if (room_type) {
-    sql += ' AND r.room_type = ?';
-    values.push(room_type);
-  }
-  
-  sql += ' ORDER BY r.room_number';
-  
-  try {
-    const [rows] = await pool.query(sql, values);
-    return rows;
-  } catch (error) {
-    console.error('Find available rooms error:', error);
-    throw error;
-  }
+// 8. Check room availability for booking (called from roomController)
+const checkRoomAvailabilityForDates = async (roomId, checkIn, checkOut) => {
+    const query = `
+        SELECT room_order_id 
+        FROM room_orders 
+        WHERE room_id = ? 
+        AND status IN ('booked', 'active')
+        AND (
+            (check_in <= ? AND check_out >= ?) OR
+            (check_in <= ? AND check_out >= ?) OR
+            (check_in >= ? AND check_out <= ?)
+        )
+        LIMIT 1
+    `;
+    const [conflicts] = await pool.execute(query, [
+        roomId, 
+        checkOut, checkIn,
+        checkIn, checkOut,  
+        checkIn, checkOut
+    ]);
+    return conflicts.length === 0;
 };
 
-// Export all functions
 module.exports = {
-  createReservation,
-  findAllReservations,
-  findReservationById,
-  findReservationsByGuestId,
-  findReservationsByRoomId,
-  findReservationsByIdentifier, // Smart unified search
-  updateReservation,
-  updateReservationStatus,
-  deleteReservation,
-  checkRoomAvailability,
-  findAvailableRooms
+    createReservation,
+    getReservations,
+    getReservationById,
+    updateReservation,
+    deleteReservation,
+    checkReservationOwnership,
+    getReservationStats,
+    checkRoomAvailabilityForDates
 };

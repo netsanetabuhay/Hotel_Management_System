@@ -1,224 +1,133 @@
 const { pool } = require('../Config/database');
 
-// CREATE - Add new food item
+// 1. Search food items with filters
+const searchFoodItems = async (filters) => {
+    let query = 'SELECT * FROM food_items WHERE 1=1';
+    const params = [];
+    
+    // Apply filters
+    if (filters.category) {
+        query += ' AND category = ?';
+        params.push(filters.category);
+    }
+    
+    if (filters.search) {
+        query += ' AND (name LIKE ? OR description LIKE ?)';
+        const searchTerm = `%${filters.search}%`;
+        params.push(searchTerm, searchTerm);
+    }
+    
+    if (filters.food_id) {
+        query += ' AND food_id = ?';
+        params.push(filters.food_id);
+    }
+    
+    if (filters.price_min) {
+        query += ' AND price >= ?';
+        params.push(parseFloat(filters.price_min));
+    }
+    
+    if (filters.price_max) {
+        query += ' AND price <= ?';
+        params.push(parseFloat(filters.price_max));
+    }
+    
+    query += ' ORDER BY category, name';
+    
+    const [rows] = await pool.execute(query, params);
+    return rows;
+};
+
+// 2. Get all food items (admin only)
+const getAllFoodItems = async () => {
+    const query = 'SELECT * FROM food_items ORDER BY category, name';
+    const [rows] = await pool.execute(query);
+    return rows;
+};
+
+// 3. Get food item by ID
+const getFoodItemById = async (foodId) => {
+    const query = 'SELECT * FROM food_items WHERE food_id = ?';
+    const [rows] = await pool.execute(query, [foodId]);
+    return rows;
+};
+
+// 4. Check if food name exists
+const checkFoodNameExists = async (name) => {
+    const query = 'SELECT food_id FROM food_items WHERE name = ?';
+    const [rows] = await pool.execute(query, [name]);
+    return rows;
+};
+
+// 5. Check if food name exists excluding current item
+const checkFoodNameExistsExcluding = async (name, excludeFoodId) => {
+    const query = 'SELECT food_id FROM food_items WHERE name = ? AND food_id != ?';
+    const [rows] = await pool.execute(query, [name, excludeFoodId]);
+    return rows;
+};
+
+// 6. Create new food item
 const createFoodItem = async (foodData) => {
-  const sql = `
-    INSERT INTO food_items 
-      (food_id, name, category, price, description) 
-    VALUES 
-      (?, ?, ?, ?, ?)
-  `;
-  
-  const values = [
-    foodData.food_id,
-    foodData.name,
-    foodData.category,
-    foodData.price,
-    foodData.description || null
-  ];
-
-  try {
-    const [result] = await pool.query(sql, values);
-    return { 
-      success: true, 
-      message: 'Food item created successfully',
-      foodId: foodData.food_id 
-    };
-  } catch (error) {
-    if (error.code === 'ER_DUP_ENTRY') {
-      throw new Error('Food item already exists');
-    }
-    throw error;
-  }
+    const query = `
+        INSERT INTO food_items (food_id, name, category, price, description)
+        VALUES (?, ?, ?, ?, ?)
+    `;
+    const [result] = await pool.execute(query, [
+        foodData.food_id,
+        foodData.name,
+        foodData.category,
+        foodData.price,
+        foodData.description || null
+    ]);
+    return result;
 };
 
-// READ - Get all food items with filters
-const findAllFoodItems = async (filters = {}) => {
-  let sql = 'SELECT * FROM food_items WHERE 1 = 1';
-  const values = [];
-
-  if (filters.category) {
-    sql += ' AND category = ?';
-    values.push(filters.category);
-  }
-  
-  if (filters.min_price) {
-    sql += ' AND price >= ?';
-    values.push(parseFloat(filters.min_price));
-  }
-  
-  if (filters.max_price) {
-    sql += ' AND price <= ?';
-    values.push(parseFloat(filters.max_price));
-  }
-
-  sql += ' ORDER BY category, name ASC';
-
-  try {
-    const [rows] = await pool.query(sql, values);
-    return rows;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// READ - Get single food item by ID
-const findFoodItemById = async (food_id) => {
-  const sql = 'SELECT * FROM food_items WHERE food_id = ?';
-  
-  try {
-    const [rows] = await pool.query(sql, [food_id]);
+// 7. Update food item
+const updateFoodItem = async (foodId, updateData) => {
+    const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+    const values = Object.values(updateData);
+    values.push(foodId);
     
-    if (rows.length === 0) {
-      return null;
-    }
-    
-    return rows[0];
-  } catch (error) {
-    throw error;
-  }
+    const query = `UPDATE food_items SET ${fields} WHERE food_id = ?`;
+    const [result] = await pool.execute(query, values);
+    return result;
 };
 
-// READ - Get food items by category
-const findFoodItemsByCategory = async (category) => {
-  const sql = 'SELECT * FROM food_items WHERE category = ? ORDER BY name ASC';
-  
-  try {
-    const [rows] = await pool.query(sql, [category]);
+// 8. Delete food item
+const deleteFoodItem = async (foodId) => {
+    const query = 'DELETE FROM food_items WHERE food_id = ?';
+    const [result] = await pool.execute(query, [foodId]);
+    return result;
+};
+
+// 9. Check if food item has orders
+const checkFoodItemOrders = async (foodId) => {
+    const query = `
+        SELECT foi.id 
+        FROM food_order_items foi
+        WHERE foi.food_id = ?
+        LIMIT 1
+    `;
+    const [rows] = await pool.execute(query, [foodId]);
     return rows;
-  } catch (error) {
-    throw error;
-  }
 };
 
-// READ - Search food items by name
-const searchFoodItemsByName = async (query) => {
-  const sql = 'SELECT * FROM food_items WHERE name LIKE ? ORDER BY name ASC';
-  
-  try {
-    const [rows] = await pool.query(sql, [`%${query}%`]);
-    return rows;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// UPDATE - Update food item details
-const updateFoodItem = async (food_id, updateData) => {
-  const setClauses = [];
-  const values = [];
-
-  const { name, category, price, description } = updateData;
-
-  if (name !== undefined) {
-    setClauses.push('name = ?');
-    values.push(name);
-  }
-  
-  if (category !== undefined) {
-    setClauses.push('category = ?');
-    values.push(category);
-  }
-
-  if (price !== undefined) {
-    setClauses.push('price = ?');
-    values.push(parseFloat(price).toFixed(2));
-  }
-
-  if (description !== undefined) {
-    setClauses.push('description = ?');
-    values.push(description || null);
-  }
-
-  if (setClauses.length === 0) {
-    return { 
-      success: false, 
-      message: 'No fields provided for update' 
-    };
-  }
-
-  values.push(food_id);
-
-  const sql = `UPDATE food_items SET ${setClauses.join(', ')} WHERE food_id = ?`;
-
-  try {
-    const [result] = await pool.query(sql, values);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Food item updated successfully' : 'Food item not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    console.error('Update error:', error);
-    return { 
-      success: false,
-      message: error.message || 'Database error during update'
-    };
-  }
-};
-
-// DELETE - Remove food item
-const deleteFoodItem = async (food_id) => {
-  const sql = 'DELETE FROM food_items WHERE food_id = ?';
-  
-  try {
-    const [result] = await pool.query(sql, [food_id]);
-    
-    return { 
-      success: result.affectedRows > 0,
-      message: result.affectedRows > 0 ? 'Food item deleted successfully' : 'Food item not found',
-      affectedRows: result.affectedRows 
-    };
-  } catch (error) {
-    throw error;
-  }
-};
-
-// READ - Get food statistics
-const getFoodStats = async () => {
-  const sql = `
-    SELECT 
-      COUNT(*) as total_items,
-      category,
-      COUNT(*) as category_count,
-      AVG(price) as avg_price,
-      MIN(price) as min_price,
-      MAX(price) as max_price
-    FROM food_items 
-    GROUP BY category
-    ORDER BY category_count DESC
-  `;
-  
-  try {
-    const [rows] = await pool.query(sql);
-    return rows;
-  } catch (error) {
-    throw error;
-  }
-};
-
-// READ - Get all categories
+// 10. Get all unique categories
 const getAllCategories = async () => {
-  const sql = 'SELECT DISTINCT category FROM food_items ORDER BY category';
-  
-  try {
-    const [rows] = await pool.query(sql);
+    const query = 'SELECT DISTINCT category FROM food_items ORDER BY category';
+    const [rows] = await pool.execute(query);
     return rows.map(row => row.category);
-  } catch (error) {
-    throw error;
-  }
 };
 
-// Export all functions
 module.exports = {
-  createFoodItem,
-  findAllFoodItems,
-  findFoodItemById,
-  findFoodItemsByCategory,
-  searchFoodItemsByName,
-  updateFoodItem,
-  deleteFoodItem,
-  getFoodStats,
-  getAllCategories
+    searchFoodItems,
+    getAllFoodItems,
+    getFoodItemById,
+    checkFoodNameExists,
+    checkFoodNameExistsExcluding,
+    createFoodItem,
+    updateFoodItem,
+    deleteFoodItem,
+    checkFoodItemOrders,
+    getAllCategories
 };

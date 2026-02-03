@@ -1,30 +1,26 @@
 const express = require('express');
 const router = express.Router();
-
-// Import controller functions
 const {
-  createFoodItem,
-  getAllFoodItems,
-  updateFoodItem,
-  deleteFoodItem,
-  searchFoodItems // ONE unified search function for all
+    searchFoodItemsController,
+    createFoodItemController,
+    updateFoodItemController,
+    deleteFoodItemController,
+    getAllCategoriesController
 } = require('../Controllers/foodItemController');
-
-// Import auth middleware
 const { authenticate, authorize } = require('../Middleware/auth');
 
-//  PUBLIC ROUTES 
-router.get('/', getAllFoodItems); // View menu (public)
-router.get('/search/:identifier', searchFoodItems); // UNIFIED SEARCH: ID, Category, Name
+// All routes require authentication
+router.use(authenticate);
 
-//  PROTECTED ROUTES 
-// Create food item (Admin/Manager/Chef only)
-router.post('/', authenticate, authorize(['admin', 'manager', 'chef']), createFoodItem);
+// 1. Main search route (for all users)
+router.get('/', searchFoodItemsController);
 
-// Update food item (Admin/Manager/Chef only)
-router.put('/:id', authenticate, authorize(['admin', 'manager', 'chef']), updateFoodItem);
+// 2. Get categories (for all users)
+router.get('/categories', getAllCategoriesController);
 
-// Delete food item (Admin/Manager only)
-router.delete('/:id', authenticate, authorize(['admin', 'manager']), deleteFoodItem);
+// Admin only routes
+router.post('/', authorize(['admin']), createFoodItemController);
+router.patch('/:id', authorize(['admin']), updateFoodItemController);
+router.delete('/:id', authorize(['admin']), deleteFoodItemController);
 
 module.exports = router;

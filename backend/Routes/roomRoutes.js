@@ -1,28 +1,30 @@
 const express = require('express');
 const router = express.Router();
-
-// Import all RoomController functions literally
 const {
-   createRoomController,
+    createRoomController,
     getAllRoomsController,
-    searchRoomsController,
+    getAvailableRoomsController,
+    searchAvailableRoomsController,
     updateRoomController,
     deleteRoomController,
-    getRoomStatsController
-}
- = require('../Controllers/roomController.js');
+    getRoomStatsController,
+    checkRoomAvailabilityController
+} = require('../Controllers/roomController');
+const { authenticate, authorize } = require('../Middleware/auth');
 
-// Import auth middleware functions literally
-const { authenticate, authorize, checkUserAccess } = require('../Middleware/auth');
+// All room routes require authentication
+router.use(authenticate);
 
+// Public routes (for all authenticated users)
+router.get('/available', getAvailableRoomsController);
+router.get('/search', searchAvailableRoomsController);
+router.get('/check-availability', checkRoomAvailabilityController);
 
-// Public routes - No authentication required for viewing rooms
-router.get('/', getAllRoomsController);
-router.get('/search', searchRoomsController);
+// Admin only routes
+router.get('/', authorize(['admin']), getAllRoomsController);
+router.post('/', authorize(['admin']), createRoomController);
+router.put('/:id', authorize(['admin']), updateRoomController);
+router.delete('/:id', authorize(['admin']), deleteRoomController);
+router.get('/stats/overview', authorize(['admin']), getRoomStatsController);
 
-// Protected routes - Authentication and authorization required
-router.get('/stats', authenticate, authorize(['admin']), getRoomStatsController);
-router.post('/', authenticate, authorize(['admin']), createRoomController);
-router.put('/:id', authenticate, authorize(['admin']), updateRoomController);
-router.delete('/:id', authenticate, authorize(['admin']), deleteRoomController);
 module.exports = router;

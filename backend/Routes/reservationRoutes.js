@@ -1,45 +1,30 @@
 const express = require('express');
 const router = express.Router();
-
-// Import controller functions
 const {
-  createReservation,
-  getAllReservations,
-  searchReservations, // ONE unified search
-  updateReservation,
-  updateReservationStatus,
-  deleteReservation,
-  checkAvailability,
-  findAvailableRooms
-} = require('../Controllers/reservationController');
+    createReservationController,
+    getReservationsController,
+    updateReservationController,
+    deleteReservationController,
+    getReservationStatsController
+} = require('../Controllers/reservationController.js');
+const { authenticate, authorize } = require('../Middleware/auth.js');
 
-// Import auth middleware
-const { authenticate, authorize } = require('../Middleware/auth');
+// All reservation routes require authentication
+router.use(authenticate);
 
-// RESERVATION MANAGEMENT ROUTES
+// 1. Create reservation (users only)
+router.post('/', createReservationController);
 
-//  PUBLIC ROUTES 
-router.get('/check-availability/:room_id', checkAvailability);
-router.get('/available-rooms', findAvailableRooms);
+// 2. Get reservations (smart: admin gets all, user gets own)
+router.get('/', getReservationsController);
 
-//  PROTECTED ROUTES 
+// 3. Update reservation (admin: all fields, user: dates only)
+router.patch('/:id', updateReservationController);
 
-// Create new reservation
-router.post('/', authenticate, authorize(['admin', 'use']), createReservation);
+// 4. Delete reservation (admin: any, user: own only)
+router.delete('/:id', deleteReservationController);
 
-// Get all reservations
-router.get('/', authenticate, authorize(['admin', 'user']), getAllReservations);
-
-// SMART UNIFIED SEARCH - ONE route for ALL searches
-router.get('/search/:identifier', searchReservations);
-
-// Update reservation
-router.put('/:id', authenticate, authorize(['admin', 'user']), updateReservation);
-
-// Update reservation status
-router.patch('/:id/status', authenticate, authorize(['admin', 'user']), updateReservationStatus);
-
-// Delete reservation
-router.delete('/:id', authenticate, authorize(['admin', 'user']), deleteReservation);
+// 5. Get statistics (admin only)
+router.get('/stats/overview', authorize(['admin']), getReservationStatsController);
 
 module.exports = router;

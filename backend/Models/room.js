@@ -1,6 +1,6 @@
-const { pool } = require('../Config/database.js');
+const { pool } = require('../Config/database');
 
-// Create new room
+// 1. Create new room (Admin only)
 const createRoom = async (roomData) => {
     const query = `
         INSERT INTO rooms (room_id, room_number, room_type, price)
@@ -15,76 +15,162 @@ const createRoom = async (roomData) => {
     return result;
 };
 
-// Get all available rooms
-const getAllRooms = async () => {
+// 2. Get all rooms FOR ADMIN (shows all rooms with booking status)
+const getAllRoomsForAdmin = async () => {
     const query = `
-        SELECT room_id, room_number, room_type, price, status
-        FROM rooms 
-        WHERE status = 'available'
-        ORDER BY room_number
+        SELECT 
+            r.room_id,
+            r.room_number,
+            r.room_type,
+            r.price,
+            r.status,
+            GROUP_CONCAT(
+                CASE 
+                    WHEN ro.status IN ('booked', 'active') 
+                    THEN CONCAT(ro.check_in, ' to ', ro.check_out)
+                    ELSE NULL
+                END
+            ) as booked_periods
+        FROM rooms r
+        LEFT JOIN room_orders ro ON r.room_id = ro.room_id 
+            AND ro.status IN ('booked', 'active')
+            AND ro.check_out >= CURDATE()
+        WHERE r.status = 'available'
+        GROUP BY r.room_id, r.room_number, r.room_type, r.price, r.status
+        ORDER BY r.room_number
     `;
     const [rows] = await pool.execute(query);
     return rows;
 };
 
-// Get room by ID
+// 3. Get available rooms FOR USERS (excludes booked rooms for given dates)
+const getAvailableRoomsForUsers = async (checkIn, checkOut) => {
+    const query = `
+        SELECT 
+            r.room_id,
+            r.room_number,
+            r.room_type,
+            r.price,
+            r.status
+        FROM rooms r
+        WHERE r.status = 'available'
+        AND r.room_id NOT IN (
+            SELECT DISTINCT room_id
+            FROM room_orders
+            WHERE status IN ('booked', 'active')
+            AND (
+                (check_in <= ? AND check_out >= ?) OR
+                (check_in <= ? AND check_out >= ?) OR
+                (check_in >= ? AND check_out <= ?)
+            )
+        )
+        ORDER BY r.price
+    `;
+    const [rows] = await pool.execute(query, [
+        checkOut, checkIn,
+        checkIn, checkOut,
+        checkIn, checkOut
+    ]);
+    return rows;
+};
+
+// 4. Get room by ID
 const getRoomById = async (roomId) => {
     const query = 'SELECT * FROM rooms WHERE room_id = ?';
     const [rows] = await pool.execute(query, [roomId]);
     return rows;
 };
 
-// Check if room number exists
+// 5. Check if room number exists
 const checkRoomNumberExists = async (roomNumber) => {
     const query = 'SELECT room_id FROM rooms WHERE room_number = ?';
     const [rows] = await pool.execute(query, [roomNumber]);
     return rows;
 };
 
-// Check if room number exists excluding current room
+// 6. Check if room number exists excluding current room
 const checkRoomNumberExistsExcluding = async (roomNumber, excludeRoomId) => {
     const query = 'SELECT room_id FROM rooms WHERE room_number = ? AND room_id != ?';
     const [rows] = await pool.execute(query, [roomNumber, excludeRoomId]);
     return rows;
 };
 
-// Search rooms with filters
-const searchRooms = async (filters) => {
+// 7. Search available rooms FOR USERS with filters
+const searchAvailableRooms = async (filters, checkIn, checkOut) => {
     let query = `
-        SELECT room_id, room_number, room_type, price, status
-        FROM rooms 
-        WHERE status = 'available'
+        SELECT 
+            r.room_id,
+            r.room_number,
+            r.room_type,
+            r.price,
+            r.status
+        FROM rooms r
+        WHERE r.status = 'available'
+        AND r.room_id NOT IN (
+            SELECT DISTINCT room_id
+            FROM room_orders
+            WHERE status IN ('booked', 'active')
+            AND (
+                (check_in <= ? AND check_out >= ?) OR
+                (check_in <= ? AND check_out >= ?) OR
+                (check_in >= ? AND check_out <= ?)
+            )
+        )
     `;
     
-    const params = [];
+    const params = [checkOut, checkIn, checkIn, checkOut, checkIn, checkOut];
     
     if (filters.room_number) {
-        query += ' AND room_number LIKE ?';
+        query += ' AND r.room_number LIKE ?';
         params.push(`%${filters.room_number}%`);
     }
     
     if (filters.room_type) {
-        query += ' AND room_type = ?';
+        query += ' AND r.room_type = ?';
         params.push(filters.room_type);
     }
     
     if (filters.price_min) {
-        query += ' AND price >= ?';
+        query += ' AND r.price >= ?';
         params.push(filters.price_min);
     }
     
     if (filters.price_max) {
-        query += ' AND price <= ?';
+        query += ' AND r.price <= ?';
         params.push(filters.price_max);
     }
     
-    query += ' ORDER BY price';
+    query += ' ORDER BY r.price';
     
     const [rows] = await pool.execute(query, params);
     return rows;
 };
 
-// Update room
+// 8. Check specific room availability for dates
+const checkRoomAvailability = async (roomId, checkIn, checkOut) => {
+    const query = `
+        SELECT room_order_id 
+        FROM room_orders 
+        WHERE room_id = ? 
+        AND status IN ('booked', 'active')
+        AND (
+            (check_in <= ? AND check_out >= ?) OR
+            (check_in <= ? AND check_out >= ?) OR
+            (check_in >= ? AND check_out <= ?)
+        )
+        LIMIT 1
+    `;
+    const [conflicts] = await pool.execute(query, [
+        roomId, 
+        checkOut, checkIn,
+        checkIn, checkOut,  
+        checkIn, checkOut
+    ]);
+    return conflicts.length === 0; // true if available
+};
+
+
+// 9. Update room
 const updateRoom = async (roomId, updateData) => {
     const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updateData);
@@ -95,33 +181,32 @@ const updateRoom = async (roomId, updateData) => {
     return result;
 };
 
-// Delete room
+// 10. Delete room
 const deleteRoom = async (roomId) => {
     const query = 'DELETE FROM rooms WHERE room_id = ?';
     const [result] = await pool.execute(query, [roomId]);
     return result;
 };
 
-// Check if room has active reservations
+// 11. Check if room has active reservations
 const checkRoomReservations = async (roomId) => {
     const query = `
         SELECT room_order_id 
         FROM room_orders 
         WHERE room_id = ? 
         AND (status = 'booked' OR status = 'active')
+        AND check_out >= CURDATE()
         LIMIT 1
     `;
     const [rows] = await pool.execute(query, [roomId]);
     return rows;
 };
 
-// Get room statistics
+// 12. Get room statistics
 const getRoomStats = async () => {
-    // Total available rooms
     const totalQuery = "SELECT COUNT(*) as total FROM rooms WHERE status = 'available'";
     const [totalResult] = await pool.execute(totalQuery);
     
-    // Rooms by type
     const typeQuery = `
         SELECT room_type, COUNT(*) as count 
         FROM rooms 
@@ -131,16 +216,25 @@ const getRoomStats = async () => {
     `;
     const [typeResult] = await pool.execute(typeQuery);
     
-    // Average price
     const avgPriceQuery = "SELECT AVG(price) as avg_price FROM rooms WHERE status = 'available'";
     const [avgPriceResult] = await pool.execute(avgPriceQuery);
     
-    // Price range
     const priceRangeQuery = "SELECT MIN(price) as min_price, MAX(price) as max_price FROM rooms WHERE status = 'available'";
     const [priceRangeResult] = await pool.execute(priceRangeQuery);
     
+    // Currently booked rooms count
+    const bookedQuery = `
+        SELECT COUNT(DISTINCT room_id) as currently_booked
+        FROM room_orders 
+        WHERE status IN ('booked', 'active')
+        AND check_out >= CURDATE()
+    `;
+    const [bookedResult] = await pool.execute(bookedQuery);
+    
     return {
         total: totalResult[0]?.total || 0,
+        currentlyBooked: bookedResult[0]?.currently_booked || 0,
+        available: (totalResult[0]?.total || 0) - (bookedResult[0]?.currently_booked || 0),
         byType: typeResult,
         averagePrice: avgPriceResult[0]?.avg_price || 0,
         priceRange: {
@@ -150,9 +244,8 @@ const getRoomStats = async () => {
     };
 };
 
-// Get revenue statistics from room orders
+// 13. Get revenue statistics
 const getRevenueStats = async () => {
-    // Total revenue from completed bookings
     const revenueQuery = `
         SELECT 
             SUM(r.price) as total_revenue,
@@ -164,7 +257,6 @@ const getRevenueStats = async () => {
     `;
     const [revenueResult] = await pool.execute(revenueQuery);
     
-    // Most booked room type
     const popularTypeQuery = `
         SELECT 
             r.room_type,
@@ -189,11 +281,13 @@ const getRevenueStats = async () => {
 
 module.exports = {
     createRoom,
-    getAllRooms,
+    getAllRoomsForAdmin,
+    getAvailableRoomsForUsers,
     getRoomById,
     checkRoomNumberExists,
     checkRoomNumberExistsExcluding,
-    searchRooms,
+    searchAvailableRooms,
+    checkRoomAvailability,
     updateRoom,
     deleteRoom,
     checkRoomReservations,
