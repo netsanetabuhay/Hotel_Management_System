@@ -9,24 +9,15 @@ const {
     deleteFoodItem,
     checkFoodItemOrders,
     getAllCategories
-} = require('../Models/foodItem');
+} = require('../Models/foodItem.js');
 
-// 1. Search food items (main function for users)
+const { sendSuccess, sendError } = require('../Utils/response');
+const { generateId } = require('../Utils/generateId');
+
+// 1. Search food items (normal website search - NO search required)
 const searchFoodItemsController = async (req, res) => {
     try {
         const { category, search, food_id, price_min, price_max } = req.query;
-        const isAdmin = req.user.role === 'admin';
-        
-        // For non-admin users: require at least one search parameter
-        if (!isAdmin) {
-            const hasNoParams = !category && !search && !food_id && !price_min && !price_max;
-            if (hasNoParams) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Please provide at least one search parameter: category, search, food_id, price_min, or price_max'
-                });
-            }
-        }
         
         const filters = {};
         if (category) filters.category = category;
@@ -38,40 +29,26 @@ const searchFoodItemsController = async (req, res) => {
         let foodItems;
         let message;
         
-        if (isAdmin && Object.keys(filters).length === 0) {
-            // Admin with no filters: get all items
+        // Normal search: if no filters, show all items
+        if (Object.keys(filters).length === 0) {
             foodItems = await getAllFoodItems();
-            message = 'All food items retrieved (Admin view)';
+            message = 'All food items retrieved';
         } else {
-            // Either user with filters, or admin with filters
+            // If filters exist, apply them
             foodItems = await searchFoodItems(filters);
-            message = Object.keys(filters).length > 0 
-                ? 'Food items retrieved with filters' 
-                : 'Food items retrieved';
+            message = 'Food items retrieved with filters';
         }
         
         // If searching by food_id and found, return single object
         if (food_id && foodItems.length === 1) {
-            return res.json({
-                success: true,
-                message: 'Food item found',
-                data: foodItems[0]
-            });
+            return sendSuccess(res, 'Food item found', foodItems[0]);
         }
         
-        res.json({
-            success: true,
-            message,
-            data: foodItems
-        });
+        return sendSuccess(res, message, foodItems);
 
     } catch (error) {
         console.error('Search food items error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error searching food items',
-            error: error.message
-        });
+        return sendError(res, 'Server error searching food items');
     }
 };
 
@@ -80,35 +57,20 @@ const createFoodItemController = async (req, res) => {
     try {
         const { name, category, price, description } = req.body;
 
-        // Validation
         if (!name || !category || !price) {
-            return res.status(400).json({
-                success: false,
-                message: 'Name, category, and price are required'
-            });
+            return sendError(res, 'Name, category, and price are required', 400);
         }
 
-        // Check if food name already exists
         const existingFood = await checkFoodNameExists(name);
         if (existingFood.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Food item with this name already exists'
-            });
+            return sendError(res, 'Food item with this name already exists', 400);
         }
 
-        // Validate price
         if (price <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Price must be greater than 0'
-            });
+            return sendError(res, 'Price must be greater than 0', 400);
         }
 
-        // Generate food ID
-        const foodId = 'FOD' + Date.now();
-
-        // Create food item
+        const foodId = generateId('FOD');
         const foodData = {
             food_id: foodId,
             name,
@@ -118,24 +80,14 @@ const createFoodItemController = async (req, res) => {
         };
 
         await createFoodItem(foodData);
-
-        // Get created food item
         const createdFood = await getFoodItemById(foodId);
         const foodItem = createdFood[0];
 
-        res.status(201).json({
-            success: true,
-            message: 'Food item created successfully',
-            data: foodItem
-        });
+        return sendSuccess(res, 'Food item created successfully', foodItem, 201);
 
     } catch (error) {
         console.error('Create food item error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error creating food item',
-            error: error.message
-        });
+        return sendError(res, 'Server error creating food item');
     }
 };
 
@@ -145,27 +97,17 @@ const updateFoodItemController = async (req, res) => {
         const { id } = req.params;
         const { name, category, price, description } = req.body;
         
-        // Check if food item exists
         const foodItems = await getFoodItemById(id);
         if (foodItems.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Food item not found'
-            });
+            return sendError(res, 'Food item not found', 404);
         }
 
-        const existingFood = foodItems[0];
         const updateData = {};
         
-        // Prepare update data
         if (name !== undefined) {
-            // Check if new name already exists (excluding current item)
             const existingName = await checkFoodNameExistsExcluding(name, id);
             if (existingName.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Food item with this name already exists'
-                });
+                return sendError(res, 'Food item with this name already exists', 400);
             }
             updateData.name = name;
         }
@@ -176,10 +118,7 @@ const updateFoodItemController = async (req, res) => {
         
         if (price !== undefined) {
             if (price <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Price must be greater than 0'
-                });
+                return sendError(res, 'Price must be greater than 0', 400);
             }
             updateData.price = parseFloat(price);
         }
@@ -189,32 +128,18 @@ const updateFoodItemController = async (req, res) => {
         }
 
         if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
+            return sendError(res, 'No fields to update', 400);
         }
 
-        // Update food item
         await updateFoodItem(id, updateData);
-
-        // Get updated food item
         const updatedFood = await getFoodItemById(id);
         const foodItem = updatedFood[0];
 
-        res.json({
-            success: true,
-            message: 'Food item updated successfully',
-            data: foodItem
-        });
+        return sendSuccess(res, 'Food item updated successfully', foodItem);
 
     } catch (error) {
         console.error('Update food item error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error updating food item',
-            error: error.message
-        });
+        return sendError(res, 'Server error updating food item');
     }
 };
 
@@ -223,39 +148,23 @@ const deleteFoodItemController = async (req, res) => {
     try {
         const { id } = req.params;
         
-        // Check if food item exists
         const foodItems = await getFoodItemById(id);
         if (foodItems.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Food item not found'
-            });
+            return sendError(res, 'Food item not found', 404);
         }
 
-        // Check if food item has existing orders
         const hasOrders = await checkFoodItemOrders(id);
         if (hasOrders.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot delete food item with existing orders'
-            });
+            return sendError(res, 'Cannot delete food item with existing orders', 400);
         }
 
-        // Delete food item
         await deleteFoodItem(id);
 
-        res.json({
-            success: true,
-            message: 'Food item deleted successfully'
-        });
+        return sendSuccess(res, 'Food item deleted successfully');
 
     } catch (error) {
         console.error('Delete food item error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error deleting food item',
-            error: error.message
-        });
+        return sendError(res, 'Server error deleting food item');
     }
 };
 
@@ -263,20 +172,11 @@ const deleteFoodItemController = async (req, res) => {
 const getAllCategoriesController = async (req, res) => {
     try {
         const categories = await getAllCategories();
-
-        res.json({
-            success: true,
-            message: 'Food categories retrieved',
-            data: categories
-        });
+        return sendSuccess(res, 'Food categories retrieved', categories);
 
     } catch (error) {
         console.error('Get categories error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving categories',
-            error: error.message
-        });
+        return sendError(res, 'Server error retrieving categories');
     }
 };
 
