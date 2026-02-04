@@ -6,7 +6,7 @@ const {
     updateFoodOrderController,
     deleteFoodOrderController,
     getFoodOrderStatsController
-} = require('../Controllers/foodOrderController.js');
+} = require('../Controllers/foodOrderController');
 const { authenticate, authorize } = require('../Middleware/auth');
 
 // All routes require authentication
@@ -18,11 +18,11 @@ router.post('/', createFoodOrderController);
 // 2. Get food orders (smart: user sees own, admin sees all)
 router.get('/', getFoodOrdersController);
 
-// 3. Update food order (user: update/cancel pending, admin can update payment status and satus of the order ordered by user )
-router.patch('/:id', updateFoodOrderController);
+// 3. Update food order (admin only)
+router.patch('/:id', authorize(['admin']), updateFoodOrderController);
 
-// 4. Delete food order (user: delete pending, admin: delete any)
-router.delete('/:id', deleteFoodOrderController);
+// 4. Delete food order (admin only)
+router.delete('/:id', authorize(['admin']), deleteFoodOrderController);
 
 // 5. Get statistics (admin only)
 router.get('/stats/overview', authorize(['admin']), getFoodOrderStatsController);

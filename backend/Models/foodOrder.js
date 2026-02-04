@@ -1,6 +1,7 @@
 const { pool } = require('../Config/database');
+const { generateId } = require('../Utils/generateId');
 
-// 1. Create food order (with items)
+// 1. Create food order with items
 const createFoodOrder = async (orderData, orderItems) => {
     const connection = await pool.getConnection();
     
@@ -130,7 +131,8 @@ const getFoodOrderByIdWithItems = async (orderId) => {
         SELECT 
             foi.*,
             fi.name,
-            fi.category
+            fi.category,
+            fi.description
         FROM food_order_items foi
         JOIN food_items fi ON foi.food_id = fi.food_id
         WHERE foi.food_order_id = ?
@@ -154,14 +156,7 @@ const checkFoodOrderOwnership = async (orderId, userId) => {
     return rows.length > 0;
 };
 
-// 5. Get order status
-const getFoodOrderStatus = async (orderId) => {
-    const query = 'SELECT order_status FROM food_orders WHERE food_order_id = ?';
-    const [rows] = await pool.execute(query, [orderId]);
-    return rows[0]?.order_status || null;
-};
-
-// 6. Update food order (status/payment)
+// 5. Update food order (status/payment - admin only)
 const updateFoodOrder = async (orderId, updateData) => {
     const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updateData);
@@ -172,44 +167,7 @@ const updateFoodOrder = async (orderId, updateData) => {
     return result;
 };
 
-// 7. Update food order items (for order modification)
-const updateFoodOrderItems = async (orderId, newItems) => {
-    const connection = await pool.getConnection();
-    
-    try {
-        await connection.beginTransaction();
-        
-        // Delete existing items
-        const deleteQuery = 'DELETE FROM food_order_items WHERE food_order_id = ?';
-        await connection.execute(deleteQuery, [orderId]);
-        
-        // Insert new items
-        for (const item of newItems) {
-            const insertQuery = `
-                INSERT INTO food_order_items 
-                (food_order_id, food_id, quantity, price)
-                VALUES (?, ?, ?, ?)
-            `;
-            await connection.execute(insertQuery, [
-                orderId,
-                item.food_id,
-                item.quantity,
-                item.price
-            ]);
-        }
-        
-        await connection.commit();
-        return { success: true };
-        
-    } catch (error) {
-        await connection.rollback();
-        throw error;
-    } finally {
-        connection.release();
-    }
-};
-
-// 8. Delete/cancel food order
+// 6. Delete food order (admin only)
 const deleteFoodOrder = async (orderId) => {
     const connection = await pool.getConnection();
     
@@ -235,7 +193,7 @@ const deleteFoodOrder = async (orderId) => {
     }
 };
 
-// 9. Get food order statistics
+// 7. Get food order statistics
 const getFoodOrderStats = async () => {
     // Total orders by status
     const statusQuery = `
@@ -308,7 +266,7 @@ const getFoodOrderStats = async () => {
     };
 };
 
-// 10. Get food price for order
+// 8. Get food price for order
 const getFoodPrice = async (foodId) => {
     const query = 'SELECT price FROM food_items WHERE food_id = ?';
     const [rows] = await pool.execute(query, [foodId]);
@@ -320,9 +278,7 @@ module.exports = {
     getFoodOrders,
     getFoodOrderByIdWithItems,
     checkFoodOrderOwnership,
-    getFoodOrderStatus,
     updateFoodOrder,
-    updateFoodOrderItems,
     deleteFoodOrder,
     getFoodOrderStats,
     getFoodPrice
