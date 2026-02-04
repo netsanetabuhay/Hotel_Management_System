@@ -2,11 +2,10 @@ const {
     createRoom,
     getAllRoomsForAdmin,
     getAvailableRoomsForUsers,
+    searchAvailableRooms,
     getRoomById,
     checkRoomNumberExists,
     checkRoomNumberExistsExcluding,
-    searchAvailableRooms,
-    checkRoomAvailability,
     updateRoom,
     deleteRoom,
     checkRoomReservations,
@@ -14,34 +13,71 @@ const {
     getRevenueStats
 } = require('../Models/room');
 
-// 1. Create new room (Admin only)
+const { sendSuccess, sendError } = require('../Utils/response');
+const { generateId } = require('../Utils/generateId');
+
+// 1. Get rooms (smart: admin sees all, user sees available)
+const getAllRoomsController = async (req, res) => {
+    try {
+        const isAdmin = req.user.role === 'admin';
+        
+        let rooms;
+        let message;
+        
+        if (isAdmin) {
+            rooms = await getAllRoomsForAdmin();
+            message = 'All rooms retrieved (Admin view)';
+        } else {
+            rooms = await getAvailableRoomsForUsers();
+            message = 'Available rooms retrieved';
+        }
+        
+        return sendSuccess(res, message, rooms);
+
+    } catch (error) {
+        console.error('Get rooms error:', error);
+        return sendError(res, 'Server error retrieving rooms', 500);
+    }
+};
+
+// 2. Search available rooms by parameter
+const searchRoomsController = async (req, res) => {
+    try {
+        const { param } = req.params;
+        
+        if (!param || param.trim() === '') {
+            return sendError(res, 'Search parameter is required', 400);
+        }
+        
+        const rooms = await searchAvailableRooms(param);
+        
+        return sendSuccess(res, `Search results for "${param}"`, rooms);
+
+    } catch (error) {
+        console.error('Search rooms error:', error);
+        return sendError(res, 'Server error searching rooms', 500);
+    }
+};
+
+// 3. Create new room (Admin only)
 const createRoomController = async (req, res) => {
     try {
         const { room_number, room_type, price } = req.body;
 
         if (!room_number || !room_type || !price) {
-            return res.status(400).json({
-                success: false,
-                message: 'Room number, room type, and price are required'
-            });
+            return sendError(res, 'Room number, room type, and price are required', 400);
         }
 
         const existingRoom = await checkRoomNumberExists(room_number);
         if (existingRoom.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Room number already exists'
-            });
+            return sendError(res, 'Room number already exists', 400);
         }
 
         if (price <= 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Price must be greater than 0'
-            });
+            return sendError(res, 'Price must be greater than 0', 400);
         }
 
-        const roomId = 'RM' + Date.now();
+        const roomId = generateId('RM');
         const roomData = {
             room_id: roomId,
             room_number,
@@ -53,160 +89,15 @@ const createRoomController = async (req, res) => {
         const createdRoom = await getRoomById(roomId);
         const room = createdRoom[0];
 
-        res.status(201).json({
-            success: true,
-            message: 'Room created successfully',
-            data: room
-        });
+        return sendSuccess(res, 'Room created successfully', room, 201);
 
     } catch (error) {
         console.error('Create room error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error creating room',
-            error: error.message
-        });
+        return sendError(res, 'Server error creating room', 500);
     }
 };
 
-// 2. Get rooms (different for admin vs user)
-const getAllRoomsController = async (req, res) => {
-    try {
-        const userRole = req.user.role;
-        
-        if (userRole === 'admin') {
-            // Admin sees all rooms with booking status
-            const rooms = await getAllRoomsForAdmin();
-            return res.json({
-                success: true,
-                message: 'All rooms retrieved (Admin view)',
-                data: rooms
-            });
-        } else {
-            // User must provide dates to see available rooms
-            return res.status(400).json({
-                success: false,
-                message: 'For user access, please use /api/rooms/available with check_in and check_out parameters'
-            });
-        }
-
-    } catch (error) {
-        console.error('Get all rooms error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving rooms',
-            error: error.message
-        });
-    }
-};
-
-// 3. Get available rooms for users (requires dates)
-const getAvailableRoomsController = async (req, res) => {
-    try {
-        const { check_in, check_out } = req.query;
-
-        if (!check_in || !check_out) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_in and check_out dates are required'
-            });
-        }
-
-        // Validate dates
-        const checkInDate = new Date(check_in);
-        const checkOutDate = new Date(check_out);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (checkInDate < today) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_in date cannot be in the past'
-            });
-        }
-
-        if (checkOutDate <= checkInDate) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_out date must be after check_in date'
-            });
-        }
-
-        const rooms = await getAvailableRoomsForUsers(check_in, check_out);
-
-        res.json({
-            success: true,
-            message: 'Available rooms retrieved',
-            data: rooms
-        });
-
-    } catch (error) {
-        console.error('Get available rooms error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving available rooms',
-            error: error.message
-        });
-    }
-};
-
-// 4. Search available rooms for users
-const searchAvailableRoomsController = async (req, res) => {
-    try {
-        const { check_in, check_out, room_number, room_type, price_min, price_max } = req.query;
-
-        if (!check_in || !check_out) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_in and check_out dates are required'
-            });
-        }
-
-        // Validate dates
-        const checkInDate = new Date(check_in);
-        const checkOutDate = new Date(check_out);
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        if (checkInDate < today) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_in date cannot be in the past'
-            });
-        }
-
-        if (checkOutDate <= checkInDate) {
-            return res.status(400).json({
-                success: false,
-                message: 'check_out date must be after check_in date'
-            });
-        }
-
-        const filters = {};
-        if (room_number) filters.room_number = room_number;
-        if (room_type) filters.room_type = room_type;
-        if (price_min) filters.price_min = parseFloat(price_min);
-        if (price_max) filters.price_max = parseFloat(price_max);
-        
-        const rooms = await searchAvailableRooms(filters, check_in, check_out);
-
-        res.json({
-            success: true,
-            message: 'Search results retrieved',
-            data: rooms
-        });
-
-    } catch (error) {
-        console.error('Search rooms error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error searching rooms',
-            error: error.message
-        });
-    }
-};
-
-// 5. Update room (Admin only)
+// 4. Update room (Admin only)
 const updateRoomController = async (req, res) => {
     try {
         const { id } = req.params;
@@ -214,10 +105,7 @@ const updateRoomController = async (req, res) => {
         
         const rooms = await getRoomById(id);
         if (rooms.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Room not found'
-            });
+            return sendError(res, 'Room not found', 404);
         }
 
         const updateData = {};
@@ -225,10 +113,7 @@ const updateRoomController = async (req, res) => {
         if (room_number !== undefined) {
             const existingRoomNumber = await checkRoomNumberExistsExcluding(room_number, id);
             if (existingRoomNumber.length > 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Room number already exists'
-                });
+                return sendError(res, 'Room number already exists', 400);
             }
             updateData.room_number = room_number;
         }
@@ -239,146 +124,76 @@ const updateRoomController = async (req, res) => {
         
         if (price !== undefined) {
             if (price <= 0) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Price must be greater than 0'
-                });
+                return sendError(res, 'Price must be greater than 0', 400);
             }
             updateData.price = parseFloat(price);
         }
 
         if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
+            return sendError(res, 'No fields to update', 400);
         }
 
         await updateRoom(id, updateData);
         const updatedRooms = await getRoomById(id);
         const updatedRoom = updatedRooms[0];
 
-        res.json({
-            success: true,
-            message: 'Room updated successfully',
-            data: updatedRoom
-        });
+        return sendSuccess(res, 'Room updated successfully', updatedRoom);
 
     } catch (error) {
         console.error('Update room error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error updating room',
-            error: error.message
-        });
+        return sendError(res, 'Server error updating room', 500);
     }
 };
 
-// 6. Delete room (Admin only)
+// 5. Delete room (Admin only)
 const deleteRoomController = async (req, res) => {
     try {
         const { id } = req.params;
         
         const rooms = await getRoomById(id);
         if (rooms.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'Room not found'
-            });
+            return sendError(res, 'Room not found', 404);
         }
 
         const activeReservations = await checkRoomReservations(id);
         if (activeReservations.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Cannot delete room with active reservations'
-            });
+            return sendError(res, 'Cannot delete room with active reservations', 400);
         }
 
         await deleteRoom(id);
 
-        res.json({
-            success: true,
-            message: 'Room deleted successfully'
-        });
+        return sendSuccess(res, 'Room deleted successfully');
 
     } catch (error) {
         console.error('Delete room error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error deleting room',
-            error: error.message
-        });
+        return sendError(res, 'Server error deleting room', 500);
     }
 };
 
-// 7. Get room statistics (Admin only)
+// 6. Get room statistics (Admin only)
 const getRoomStatsController = async (req, res) => {
     try {
         const roomStats = await getRoomStats();
         const revenueStats = await getRevenueStats();
 
-        res.json({
-            success: true,
-            message: 'Room statistics retrieved',
-            data: {
-                roomStats,
-                revenueStats
-            }
-        });
+        const data = {
+            roomStats,
+            revenueStats
+        };
+
+        return sendSuccess(res, 'Room statistics retrieved', data);
 
     } catch (error) {
         console.error('Get room stats error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving room statistics',
-            error: error.message
-        });
-    }
-};
-
-// 8. Check specific room availability
-const checkRoomAvailabilityController = async (req, res) => {
-    try {
-        const { room_id, check_in, check_out } = req.query;
-
-        if (!room_id || !check_in || !check_out) {
-            return res.status(400).json({
-                success: false,
-                message: 'room_id, check_in, and check_out are required'
-            });
-        }
-
-        const isAvailable = await checkRoomAvailability(room_id, check_in, check_out);
-
-        res.json({
-            success: true,
-            message: `Room ${room_id} availability checked`,
-            data: {
-                room_id,
-                check_in,
-                check_out,
-                available: isAvailable
-            }
-        });
-
-    } catch (error) {
-        console.error('Check room availability error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error checking room availability',
-            error: error.message
-        });
+        return sendError(res, 'Server error retrieving room statistics', 500);
     }
 };
 
 module.exports = {
-    createRoomController,
     getAllRoomsController,
-    getAvailableRoomsController,
-    searchAvailableRoomsController,
+    searchRoomsController,
+    createRoomController,
     updateRoomController,
     deleteRoomController,
-    getRoomStatsController,
-    checkRoomAvailabilityController
+    getRoomStatsController
 };

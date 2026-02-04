@@ -1,29 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const {
-    createRoomController,
     getAllRoomsController,
-    getAvailableRoomsController,
-    searchAvailableRoomsController,
+    searchRoomsController,
+    createRoomController,
     updateRoomController,
     deleteRoomController,
-    getRoomStatsController,
-    checkRoomAvailabilityController
+    getRoomStatsController
 } = require('../Controllers/roomController');
 const { authenticate, authorize } = require('../Middleware/auth');
 
 // All room routes require authentication
 router.use(authenticate);
 
-// Public routes (for all authenticated users)
-router.get('/available', getAvailableRoomsController);
-router.get('/search', searchAvailableRoomsController);
-router.get('/check-availability', checkRoomAvailabilityController);
+// 1. Get rooms (smart: admin sees all, user sees available)
+router.get('/', getAllRoomsController);
+
+// 2. Search available rooms by parameter
+router.get('/search/:param', searchRoomsController);
 
 // Admin only routes
-router.get('/', authorize(['admin']), getAllRoomsController);
 router.post('/', authorize(['admin']), createRoomController);
-router.put('/:id', authorize(['admin']), updateRoomController);
+router.patch('/:id', authorize(['admin']), updateRoomController);
 router.delete('/:id', authorize(['admin']), deleteRoomController);
 router.get('/stats/overview', authorize(['admin']), getRoomStatsController);
 
