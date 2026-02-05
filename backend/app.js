@@ -30,7 +30,7 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/room-orders', reservationRoutes);
 app.use('/api/food-items', foodItemRoutes);
 app.use('/api/food-orders', foodOrderRoutes);
-// app.use('/api/food-order-items', food_order_itemsRoutes);
+
 // // 6. BASIC ROUTES
 app.get('/', (req, res) => {
     res.json({
