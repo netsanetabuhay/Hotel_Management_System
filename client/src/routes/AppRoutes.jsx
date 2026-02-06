@@ -1,10 +1,11 @@
-import { Routes, Route, Navigate } from 'react-router-dom'; // Remove 'Router' from imports
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from '../pages/Login';
 import Register from '../pages/Register';
+import DashboardRouter from "../dashboard/DashboardRouter";
 import Home from '../pages/Home';
 import ForgotPassword from '../pages/ForgotPassword';
 import ResetPassword from '../pages/ResetPassword';
-import Layout from '../components/Layout';
+import Profile from '../pages/Profile';
 
 // Private Route Component
 const PrivateRoute = ({ children }) => {
@@ -15,24 +16,18 @@ const PrivateRoute = ({ children }) => {
 // Public Route Component (redirect if logged in)
 const PublicRoute = ({ children }) => {
   const token = localStorage.getItem('token');
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
-  
   if (token) {
-    // Redirect based on role
-    if (user.role === 'admin') {
-      return <Navigate to="/admin/dashboard" />;
-    } else {
-      return <Navigate to="/" />;
-    }
+    return <Navigate to="/dashboard" />;
   }
   return children;
 };
 
 function AppRoutes() {
   return (
-    // Remove <Router> wrapper here, keep only <Routes>
     <Routes>
       {/* Public Routes */}
+      <Route path="/" element={<Home />} />
+      
       <Route path="/login" element={
         <PublicRoute>
           <Login />
@@ -57,16 +52,53 @@ function AppRoutes() {
         </PublicRoute>
       } />
       
-      {/* Protected Routes */}
-      <Route path="/" element={
+      {/* Protected Dashboard Routes */}
+      <Route path="/dashboard/*" element={
         <PrivateRoute>
-          <Layout>
-            <Home />
-          </Layout>
+          <DashboardRouter />
         </PrivateRoute>
       } />
       
-      {/* Redirect unknown routes */}
+      {/* Protected Profile Route */}
+      <Route path="/profile" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      {/* Admin Dashboard Route */}
+      <Route path="/admin/dashboard" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      {/* Protected page routes - will redirect to login */}
+      <Route path="/rooms" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/food-menu" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/bookings" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      <Route path="/orders" element={
+        <PrivateRoute>
+          <DashboardRouter />
+        </PrivateRoute>
+      } />
+      
+      {/* Redirect unknown routes to home */}
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

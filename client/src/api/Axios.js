@@ -1,6 +1,6 @@
 import axios from 'axios';
+import { toast } from 'react-toastify';
 
-// Create axios instance with base URL
 const Axios = axios.create({
   baseURL: 'http://localhost:5000/api',
   headers: {
@@ -8,7 +8,7 @@ const Axios = axios.create({
   },
 });
 
-// Add request interceptor to add token
+// Add request interceptor to include token
 Axios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -22,15 +22,19 @@ Axios.interceptors.request.use(
   }
 );
 
-// Add response interceptor to handle errors
+// Add response interceptor to handle token expiration
 Axios.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
-      // Clear local storage and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+      toast.error('Session expired. Please login again.');
       window.location.href = '/login';
+    } else if (error.response?.status === 500) {
+      toast.error('Server error. Please try again later.');
     }
     return Promise.reject(error);
   }

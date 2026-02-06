@@ -21,7 +21,8 @@ function ProfileDropDown({ user }) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     toast.success('Logged out successfully');
-    navigate('/login');
+    navigate('/');
+    window.location.reload();
   };
 
   const getInitials = (name) => {
@@ -48,7 +49,7 @@ function ProfileDropDown({ user }) {
           </span>
           <span className="text-xs text-gray-500 capitalize">{user.role}</span>
         </div>
-        <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
+        <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-700 rounded-full flex items-center justify-center">
           <span className="text-white font-bold text-sm">
             {getInitials(user.first_name || user.username)}
           </span>
@@ -95,6 +96,17 @@ function ProfileDropDown({ user }) {
             </Link>
 
             <Link
+              to="/dashboard"
+              className="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+              onClick={() => setIsOpen(false)}
+            >
+              <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+              </svg>
+              Dashboard
+            </Link>
+
+            <Link
               to="/bookings"
               className="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
               onClick={() => setIsOpen(false)}
@@ -118,7 +130,7 @@ function ProfileDropDown({ user }) {
 
             {user.role === 'admin' && (
               <Link
-                to="/admin"
+                to="/admin/dashboard"
                 className="flex items-center px-4 py-2 text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
                 onClick={() => setIsOpen(false)}
               >
@@ -133,7 +145,10 @@ function ProfileDropDown({ user }) {
             <div className="border-t border-gray-100 my-2"></div>
 
             <button
-              onClick={handleLogout}
+              onClick={() => {
+                handleLogout();
+                setIsOpen(false);
+              }}
               className="w-full flex items-center px-4 py-2 text-red-600 hover:bg-red-50 transition-colors"
             >
               <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
