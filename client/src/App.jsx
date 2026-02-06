@@ -5,6 +5,7 @@ import AppRoutes from "./routes/AppRoutes";
 
 function App() {
   return (
+    // We wrap our entire app in BrowserRouter to enable routing throughout the app
     <>
       <BrowserRouter>
         <AppRoutes />
