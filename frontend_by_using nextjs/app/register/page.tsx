@@ -75,11 +75,7 @@ export default function Register() {
         body: JSON.stringify(dataToSend),
       })
       
-      console.log("Response status:", response.status)
-      console.log("Response headers:", response.headers)
-      
       const data = await response.json()
-      console.log("Response data:", data)
       
       if (response.ok) {
         // Check if success property exists (like in the original code)
@@ -88,7 +84,7 @@ export default function Register() {
             title: "Registration successful!",
             description: "Please login to continue.",
           })
-          router.push("/login")
+          router.push("/login");
         } else {
           // Handle cases where response is ok but success is false
           const errorMessage = data?.message || data?.error || "Registration failed"
