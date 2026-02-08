@@ -1,138 +1,106 @@
 "use client"
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { useAuth } from '@/lib/auth-context'
+import { Button } from '@/components/ui/button'
 import {
-  LayoutDashboard,
-  BedDouble,
-  CalendarCheck,
-  UtensilsCrossed,
+  Home,
+  Hotel,
+  Calendar,
+  Utensils,
   Users,
-  UserCircle,
   BarChart3,
   LogOut,
-  Menu,
-  X,
-  Hotel,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { useAuth } from "@/lib/auth-context"
-import { useState } from "react"
+  User,
+  ShoppingBag,
+  Bell
+} from 'lucide-react'
+import { cn } from '@/lib/utils'
 
-const adminNavItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/rooms", label: "Rooms", icon: BedDouble },
-  { href: "/dashboard/reservations", label: "Reservations", icon: CalendarCheck },
-  { href: "/dashboard/food-menu", label: "Food Menu", icon: UtensilsCrossed },
-  { href: "/dashboard/orders", label: "Food Orders", icon: UtensilsCrossed },
-  { href: "/dashboard/users", label: "Users", icon: Users },
-  { href: "/dashboard/reports", label: "Reports", icon: BarChart3 },
-  { href: "/dashboard/profile", label: "Profile", icon: UserCircle },
-]
-
-const guestNavItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/dashboard/reservations", label: "My Reservations", icon: CalendarCheck },
-  { href: "/dashboard/food-menu", label: "Food Menu", icon: UtensilsCrossed },
-  { href: "/dashboard/orders", label: "My Orders", icon: UtensilsCrossed },
-  { href: "/dashboard/profile", label: "Profile", icon: UserCircle },
-]
-
-export function DashboardSidebar() {
+export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
-  const [mobileOpen, setMobileOpen] = useState(false)
 
-  const navItems = user?.role === "admin" || user?.role === "receptionist" ? adminNavItems : guestNavItems
+  if (!user) return null
 
-  const handleLogout = () => {
-    logout()
-    window.location.href = "/login"
-  }
+  // Navigation items based on role
+  const navItems = user.role === 'admin' ? [
+    { href: '/dashboard/admin', label: 'Dashboard', icon: Home },
+    { href: '/dashboard/rooms', label: 'Rooms', icon: Hotel },
+    { href: '/dashboard/reservations', label: 'Reservations', icon: Calendar },
+    { href: '/dashboard/orders', label: 'Orders', icon: ShoppingBag },
+    { href: '/dashboard/food-menu', label: 'Food Menu', icon: Utensils },
+    { href: '/dashboard/users', label: 'Users', icon: Users },
+    { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
+    { href: '/dashboard/profile', label: 'Profile', icon: User },
+  ] : [
+    { href: '/dashboard/user', label: 'Dashboard', icon: Home },
+    { href: '/dashboard/reservations', label: 'My Bookings', icon: Calendar },
+    { href: '/dashboard/orders', label: 'My Orders', icon: ShoppingBag },
+    { href: '/dashboard/food-menu', label: 'Menu', icon: Utensils },
+    { href: '/dashboard/profile', label: 'Profile', icon: User },
+    { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+  ]
 
   return (
-    <>
-      {/* Mobile menu button */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="fixed top-4 left-4 z-50 lg:hidden"
-        onClick={() => setMobileOpen(!mobileOpen)}
-      >
-        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        <span className="sr-only">Toggle menu</span>
-      </Button>
-
-      {/* Overlay */}
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-foreground/20 z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
-      )}
-
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 z-40 w-64 bg-card border-r border-border transform transition-transform duration-200 ease-in-out lg:translate-x-0 lg:static lg:inset-auto",
-          mobileOpen ? "translate-x-0" : "-translate-x-full"
-        )}
-      >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-border">
-            <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary text-primary-foreground">
-              <Hotel className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="font-semibold text-foreground">Grand Hotel</h1>
-              <p className="text-xs text-muted-foreground">Management System</p>
-            </div>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <div className="hidden border-r bg-background md:block w-64">
+      <div className="flex h-full max-h-screen flex-col gap-2">
+        <div className="flex h-14 items-center border-b px-4">
+          <Link href="/dashboard" className="flex items-center gap-2 font-semibold">
+            <Hotel className="h-6 w-6 text-primary" />
+            <span className="text-lg">Hotel Management</span>
+          </Link>
+        </div>
+        
+        <div className="flex-1">
+          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
             {navItems.map((item) => {
+              const Icon = item.icon
               const isActive = pathname === item.href
+              
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  onClick={() => setMobileOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    "flex items-center gap-3 rounded-lg px-3 py-2 transition-all",
+                    isActive 
+                      ? "bg-accent text-primary" 
+                      : "text-muted-foreground hover:text-primary hover:bg-accent/50"
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                   {item.label}
                 </Link>
               )
             })}
           </nav>
-
-          {/* User section */}
-          <div className="p-4 border-t border-border">
-            <div className="flex items-center gap-3 px-3 py-2">
-              <div className="flex items-center justify-center w-9 h-9 rounded-full bg-accent text-accent-foreground">
-                <UserCircle className="h-5 w-5" />
+        </div>
+        
+        <div className="mt-auto p-4 border-t">
+          <div className="mb-4">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="h-4 w-4 text-primary" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">{user?.name || "Guest"}</p>
-                <p className="text-xs text-muted-foreground capitalize">{user?.role || "User"}</p>
+              <div>
+                <p className="text-sm font-medium">{user.username}</p>
+                <p className="text-xs text-muted-foreground capitalize">{user.role}</p>
               </div>
             </div>
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-3 mt-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-              onClick={handleLogout}
-            >
-              <LogOut className="h-5 w-5" />
-              Sign Out
-            </Button>
           </div>
+          
+          <Button
+            variant="outline"
+            className="w-full justify-start"
+            onClick={logout}
+          >
+            <LogOut className="mr-2 h-4 w-4" />
+            Logout
+          </Button>
         </div>
-      </aside>
-    </>
+      </div>
+    </div>
   )
 }
