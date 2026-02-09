@@ -19,7 +19,7 @@ const app = express();
 
 
 // // 4. APPLY MIDDLEWARE
-app.use(cors());                          // Enable CORS
+app.use(cors());                             // Enable CORS
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());                  // Parse JSON bodies
 dotenv.config();                       

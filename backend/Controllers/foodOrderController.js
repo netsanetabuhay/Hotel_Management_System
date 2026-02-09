@@ -97,11 +97,23 @@ const getFoodOrdersController = async (req, res) => {
             return sendSuccess(res, 'Order retrieved with items', orderWithItems);
         }
 
+        // For all orders, get items with quantities
+        const ordersWithItems = await Promise.all(
+            orders.map(async (order) => {
+                const orderWithItems = await getFoodOrderByIdWithItems(order.food_order_id);
+                return {
+                    ...order,
+                    items: orderWithItems.items, // This includes quantity for each item
+                    total: orderWithItems.order?.total || 0
+                };
+            })
+        );
+
         const message = isAdmin 
             ? 'All food orders retrieved' 
             : 'Your food orders retrieved';
 
-        return sendSuccess(res, message, orders);
+        return sendSuccess(res, message, ordersWithItems);
 
     } catch (error) {
         console.error('Get food orders error:', error);
