@@ -324,7 +324,7 @@ function RoomDetailsDialog({ room, open, onOpenChange }: { room: Room | null; op
 export default function RoomsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const isAdmin = user?.role === "admin" || user?.role === "receptionist"
+  const isAdmin = user?.role === "admin" || user?.role === "user"
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")

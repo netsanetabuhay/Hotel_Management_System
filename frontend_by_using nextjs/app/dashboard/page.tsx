@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react'
 export default function DashboardRedirectPage() {
   const { user, isLoading } = useAuth()
   const router = useRouter()
-
+  
   useEffect(() => {
     if (!isLoading && user) {
       // Redirect based on role
@@ -30,3 +30,7 @@ export default function DashboardRedirectPage() {
 
   return null
 }
+
+/*
+
+*/

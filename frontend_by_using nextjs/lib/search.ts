@@ -1,7 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 export interface SearchResult {
-  type: 'room' | 'reservation' | 'food_order' | 'food_item';
+  type: 'room' | 'reservation' | 'food-orders' | 'food-item';
   id: string;
   title: string;
   description: string;
@@ -99,7 +99,7 @@ export const searchApi = {
         id: order.food_order_id,
         title: 'Food Order',
         description: `${order.order_place} - ${order.order_status}`,
-        link: '/dashboard/orders',
+        link: '/dashboard/food-orders',
         timestamp: order.created_at,
       }));
     } catch {
