@@ -1,27 +1,63 @@
-// app/dashboard/admin/page.tsx - ADMIN DASHBOARD
-'use client'
+"use client"
 
 import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Hotel, Users, Calendar, DollarSign, TrendingUp, AlertCircle } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Hotel, Users, Calendar, DollarSign, TrendingUp, AlertCircle, Package, ShoppingCart, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { adminApi } from '@/lib/api/admin-dashboard'
+import { toast } from 'sonner'
 
 export default function AdminDashboardPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [stats, setStats] = useState({
+    totalUsers: 0,
+    availableRooms: 0,
+    foodItems: 0,
+    pendingOrders: 0,
+    totalRevenue: 0,
+    todayReservations: 0
+  })
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
       router.push('/dashboard/user')
     }
-  }, [user, router])
+    
+    if (user && token && user.role === 'admin') {
+      fetchDashboardStats()
+    }
+  }, [user, token, router])
+
+  const fetchDashboardStats = async () => {
+    try {
+      setIsLoading(true)
+      const dashboardStats = await adminApi.getDashboardStats(token!)
+      setStats(dashboardStats)
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error)
+      toast.error('Failed to load dashboard data')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   if (!user || user.role !== 'admin') {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
@@ -33,49 +69,49 @@ export default function AdminDashboardPage() {
         <p className="text-muted-foreground">Welcome back, {user?.username}. Here's what's happening.</p>
       </div>
 
-      {/* Stats */}
+      {/* Stats with Real Data */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Rooms</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Available Rooms</CardTitle>
             <Hotel className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">42</div>
-            <p className="text-xs text-muted-foreground">+2 from last month</p>
+            <div className="text-2xl font-bold text-foreground">{stats.availableRooms}</div>
+            <p className="text-xs text-muted-foreground">Ready for booking</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Guests</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Food Items</CardTitle>
+            <Package className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">128</div>
-            <p className="text-xs text-muted-foreground">+18 from yesterday</p>
+            <div className="text-2xl font-bold text-foreground">{stats.foodItems}</div>
+            <p className="text-xs text-muted-foreground">In menu</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Reservations</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Today's Reservations</CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">56</div>
-            <p className="text-xs text-muted-foreground">+5 today</p>
+            <div className="text-2xl font-bold text-foreground">{stats.todayReservations}</div>
+            <p className="text-xs text-muted-foreground">Check-ins today</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pending Orders</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">$12,450</div>
-            <p className="text-xs text-muted-foreground">+10% from last month</p>
+            <div className="text-2xl font-bold text-foreground">{stats.pendingOrders}</div>
+            <p className="text-xs text-muted-foreground">Awaiting preparation</p>
           </CardContent>
         </Card>
       </div>
@@ -88,42 +124,104 @@ export default function AdminDashboardPage() {
             <CardDescription>Frequently used admin actions</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button variant="outline" className="w-full justify-start" onClick={() => router.push('/dashboard/rooms')}>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start" 
+              onClick={() => router.push('/dashboard/rooms')}
+            >
               <Hotel className="mr-2 h-4 w-4" />
               Manage Rooms
             </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={() => router.push('/dashboard/users')}>
+            <Button 
+              variant="outline" 
+              className="w-full justify-start" 
+              onClick={() => router.push('/dashboard/users')}
+            >
               <Users className="mr-2 h-4 w-4" />
               Manage Users
             </Button>
-            <Button variant="outline" className="w-full justify-start" onClick={() => router.push('/dashboard/reservations')}>
-              <Calendar className="mr-2 h-4 w-4" />
-              View Reservations
+            <Button 
+              variant="outline" 
+              className="w-full justify-start" 
+              onClick={() => router.push('/dashboard/food-menu')}
+            >
+              <Package className="mr-2 h-4 w-4" />
+              Manage Food Menu
             </Button>
           </CardContent>
         </Card>
 
         <Card className="md:col-span-2">
           <CardHeader>
-            <CardTitle>Recent Activity</CardTitle>
-            <CardDescription>Latest system events</CardDescription>
+            <CardTitle>System Status</CardTitle>
+            <CardDescription>Current system performance</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[1, 2, 3].map((item) => (
-                <div key={item} className="flex items-center gap-3">
-                  <div className="h-2 w-2 rounded-full bg-primary"></div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">New reservation created</p>
-                    <p className="text-xs text-muted-foreground">2 minutes ago</p>
-                  </div>
-                  <Button size="sm" variant="ghost">View</Button>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Backend API</p>
+                  <p className="text-xs text-muted-foreground">Connected and running</p>
                 </div>
-              ))}
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">Online</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-emerald-500"></div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Database</p>
+                  <p className="text-xs text-muted-foreground">All systems operational</p>
+                </div>
+                <Badge variant="outline" className="bg-emerald-50 text-emerald-700">Online</Badge>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="h-2 w-2 rounded-full bg-blue-500"></div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-foreground">Image Upload Service</p>
+                  <p className="text-xs text-muted-foreground">Ready for uploads</p>
+                </div>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700">Ready</Badge>
+              </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin Reports */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Reports & Analytics</CardTitle>
+          <CardDescription>Detailed system analytics</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Button 
+              variant="outline" 
+              className="h-auto py-4 flex flex-col items-center justify-center gap-2"
+              onClick={() => router.push('/dashboard/reports')}
+            >
+              <DollarSign className="h-8 w-8 text-muted-foreground" />
+              <span>Revenue Report</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-auto py-4 flex flex-col items-center justify-center gap-2"
+              onClick={() => router.push('/dashboard/reports/occupancy')}
+            >
+              <Hotel className="h-8 w-8 text-muted-foreground" />
+              <span>Occupancy Rate</span>
+            </Button>
+            <Button 
+              variant="outline" 
+              className="h-auto py-4 flex flex-col items-center justify-center gap-2"
+              onClick={() => router.push('/dashboard/reports/food')}
+            >
+              <Package className="h-8 w-8 text-muted-foreground" />
+              <span>Food Sales</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
