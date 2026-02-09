@@ -10,6 +10,8 @@ const {
     checkFoodItemOrders,
     getAllCategories
 } = require('../Models/foodItem.js');
+const uploadController = require('./uploadController'); // Add this import
+
 
 const { sendSuccess, sendError } = require('../Utils/response');
 const { generateId } = require('../Utils/generateId');
@@ -55,7 +57,7 @@ const searchFoodItemsController = async (req, res) => {
 // 2. Create food item (admin only)
 const createFoodItemController = async (req, res) => {
     try {
-        const { name, category, price, description } = req.body;
+        const { name, category, price, description,image_url } = req.body;
 
         if (!name || !category || !price) {
             return sendError(res, 'Name, category, and price are required', 400);
@@ -76,6 +78,7 @@ const createFoodItemController = async (req, res) => {
             name,
             category,
             price: parseFloat(price),
+            image_url: image_url || null , // Add image_url
             description: description || null
         };
 
@@ -95,7 +98,7 @@ const createFoodItemController = async (req, res) => {
 const updateFoodItemController = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, category, price, description } = req.body;
+        const { name, category, price, description,image_url } = req.body;
         
         const foodItems = await getFoodItemById(id);
         if (foodItems.length === 0) {
@@ -125,6 +128,9 @@ const updateFoodItemController = async (req, res) => {
         
         if (description !== undefined) {
             updateData.description = description || null;
+        }
+        if (image_url !== undefined) {
+            updateData.image_url = image_url || null;
         }
 
         if (Object.keys(updateData).length === 0) {

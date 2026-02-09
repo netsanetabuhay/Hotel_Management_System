@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const bycrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const mysql = require('mysql2');
+const path = require('path');
 
 // // 2. ROUTE IMPORTS
 const userRoutes = require('./Routes/userRoutes');
@@ -12,6 +13,8 @@ const roomRoutes = require('./Routes/roomRoutes');
 const reservationRoutes = require('./Routes/reservationRoutes');
 const foodItemRoutes = require('./Routes/foodItemRoutes');
 const foodOrderRoutes = require('./Routes/foodOrderRoutes');
+const uploadRoutes = require('./Routes/uploadRoutes');
+
 
 
 // // 3. INITIALIZE APP
@@ -24,12 +27,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());                  // Parse JSON bodies
 dotenv.config();                       
 
+
+//servet static files from uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // // 5. MOUNT ROUTES
 app.use('/api/users', userRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/room-orders', reservationRoutes);
 app.use('/api/food-items', foodItemRoutes);
 app.use('/api/food-orders', foodOrderRoutes);
+app.use('/api/uploads', uploadRoutes); // Add upload routes
+
+
+
+
 
 // // 6. BASIC ROUTES
 app.get('/', (req, res) => {

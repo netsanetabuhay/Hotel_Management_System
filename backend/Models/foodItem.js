@@ -1,8 +1,8 @@
 const { pool } = require('../Config/database');
 
 // 1. Search food items with filters
-const searchFoodItems = async (filters) => {
-    let query = 'SELECT * FROM food_items WHERE 1=1';
+    const searchFoodItems = async (filters) => {
+    let query = 'SELECT food_id, name, category, price, description, image_url FROM food_items WHERE 1=1';
     const params = [];
     
     // Apply filters
@@ -39,8 +39,8 @@ const searchFoodItems = async (filters) => {
 };
 
 // 2. Get all food items (admin only)
-const getAllFoodItems = async () => {
-    const query = 'SELECT * FROM food_items ORDER BY category, name';
+    const getAllFoodItems = async () => {
+    const query = 'SELECT food_id, name, category, price, description, image_url FROM food_items ORDER BY category, name';
     const [rows] = await pool.execute(query);
     return rows;
 };
@@ -69,20 +69,32 @@ const checkFoodNameExistsExcluding = async (name, excludeFoodId) => {
 // 6. Create new food item
 const createFoodItem = async (foodData) => {
     const query = `
-        INSERT INTO food_items (food_id, name, category, price, description)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO food_items (food_id, name, category, price,image_url, description)
+        VALUES (?, ?, ?, ?, ?, ?)
     `;
     const [result] = await pool.execute(query, [
         foodData.food_id,
         foodData.name,
         foodData.category,
         foodData.price,
+        foodData.image_url || null,
         foodData.description || null
     ]);
     return result;
 };
 
-// 7. Update food item
+// // 7. Update food item
+// const updateFoodItem = async (foodId, updateData) => {
+//     const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
+//     const values = Object.values(updateData);
+//     values.push(foodId);
+    
+    
+//     const query = `UPDATE food_items SET ${fields} WHERE food_id = ?`;
+//     const [result] = await pool.execute(query, values);
+//     return result;
+// };
+
 const updateFoodItem = async (foodId, updateData) => {
     const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updateData);

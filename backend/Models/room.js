@@ -4,14 +4,15 @@ const { generateId } = require('../Utils/generateId');
 // 1. Create new room
 const createRoom = async (roomData) => {
     const query = `
-        INSERT INTO rooms (room_id, room_number, room_type, price)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO rooms (room_id, room_number, room_type, price,image_url)
+        VALUES (?, ?, ?, ?, ?, ?)
     `;
     const [result] = await pool.execute(query, [
         roomData.room_id,
         roomData.room_number,
         roomData.room_type,
-        roomData.price
+        roomData.price,
+        roomData.image_url || null
     ]);
     return result;
 };
@@ -24,6 +25,7 @@ const getAllRoomsForAdmin = async () => {
             r.room_number,
             r.room_type,
             r.price,
+            r.image_url,
             r.status,
             CASE 
                 WHEN EXISTS (
@@ -51,6 +53,7 @@ const getAvailableRoomsForUsers = async () => {
             r.room_number,
             r.room_type,
             r.price,
+            r.image_url,
             r.status
         FROM rooms r
         WHERE r.status = 'available'
@@ -81,6 +84,7 @@ const searchAvailableRooms = async (searchParam) => {
             r.room_number,
             r.room_type,
             r.price,
+            r.image_url,
             r.status
         FROM rooms r
         WHERE r.status = 'available'

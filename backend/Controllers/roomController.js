@@ -62,7 +62,7 @@ const searchRoomsController = async (req, res) => {
 // 3. Create new room (Admin only)
 const createRoomController = async (req, res) => {
     try {
-        const { room_number, room_type, price } = req.body;
+        const { room_number, room_type, price, image_url } = req.body;
 
         if (!room_number || !room_type || !price) {
             return sendError(res, 'Room number, room type, and price are required', 400);
@@ -73,6 +73,7 @@ const createRoomController = async (req, res) => {
             return sendError(res, 'Room number already exists', 400);
         }
 
+
         if (price <= 0) {
             return sendError(res, 'Price must be greater than 0', 400);
         }
@@ -81,6 +82,7 @@ const createRoomController = async (req, res) => {
         const roomData = {
             room_id: roomId,
             room_number,
+            image_url: image_url || null,
             room_type,
             price: parseFloat(price)
         };
