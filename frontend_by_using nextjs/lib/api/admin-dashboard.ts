@@ -41,90 +41,73 @@ export interface UploadResponse {
     mimetype: string;
   };
 }
+  // Dashboard Stats
 
 export const adminApi = {
   // Dashboard Stats
-//   getDashboardStats: async (token: string): Promise<DashboardStats> => {
-//     try {
-//       // Fetch multiple endpoints to get stats
-//       const [roomsRes, foodRes, reservationsRes, ordersRes] = await Promise.all([
-//         fetch(`${API_URL}/rooms/stats/rooms`, {
-//           headers: { 'Authorization': `Bearer ${token}` }
-//         }),
-//         fetch(`${API_URL}/food-items`, {
-//           headers: { 'Authorization': `Bearer ${token}` }
-//         }),
-//         fetch(`${API_URL}/room-orders`, {
-//           headers: { 'Authorization': `Bearer ${token}` }
-//         }),
-//         fetch(`${API_URL}/food-orders`, {
-//           headers: { 'Authorization': `Bearer ${token}` }
-//         })
-//       ]);
-
-//       const roomsData = await roomsRes.json();
-//       const foodData = await foodRes.json();
-//       const reservationsData = await reservationsRes.json();
-//       const ordersData = await ordersRes.json();
-
-//       const today = new Date().toISOString().split('T')[0];
-//       const todayReservations = reservationsData.data?.filter((res: any) => 
-//         res.check_in === today
-//       ).length || 0;
-
-//       return {
-//         totalUsers: 0, // Need a users endpoint
-//         availableRooms: roomsData.data?.available || 0,
-//         foodItems: foodData.data?.length || 0,
-//         pendingOrders: ordersData.data?.filter((order: any) => 
-//           order.order_status === 'pending'
-//         ).length || 0,
-//         totalRevenue: 0, // Need revenue endpoint
-//         todayReservations
-//       };
-//     } catch (error) {
-//       console.error('Error fetching dashboard stats:', error);
-//       throw error;
-//     }
-//   },
-getDashboardStats: async (token: string): Promise<DashboardStats> => {
+  getDashboardStats: async (token: string): Promise<DashboardStats> => {
     try {
-      // Fetch available rooms directly
-      const roomsRes = await fetch(`${API_URL}/rooms/available`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      // Fetch other data
-      const [foodRes, reservationsRes, ordersRes] = await Promise.all([
+      // Fetch all necessary data from backend
+      const [availableRoomsRes, allRoomsRes, foodRes, reservationsRes, ordersRes] = await Promise.all([
+        // Available rooms for users (current date)
+        fetch(`${API_URL}/rooms/available`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        // All rooms for admin
+        fetch(`${API_URL}/rooms`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }),
+        // Food items
         fetch(`${API_URL}/food-items`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
+        // Reservations
         fetch(`${API_URL}/room-orders`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
+        // Food orders
         fetch(`${API_URL}/food-orders`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
 
-      const roomsData = await roomsRes.json();
+      const availableRoomsData = await availableRoomsRes.json();
+      const allRoomsData = await allRoomsRes.json();
       const foodData = await foodRes.json();
       const reservationsData = await reservationsRes.json();
       const ordersData = await ordersRes.json();
 
       const today = new Date().toISOString().split('T')[0];
-      const todayReservations = reservationsData.data?.filter((res: any) => 
-        res.check_in === today
-      ).length || 0;
+      
+      // Calculate today's reservations
+      let todayReservations = 0;
+      if (reservationsData.success && Array.isArray(reservationsData.data)) {
+        todayReservations = reservationsData.data.filter((res: any) => {
+          const checkInDate = new Date(res.check_in).toISOString().split('T')[0];
+          return checkInDate === today;
+        }).length;
+      }
+
+      // Calculate available rooms
+      let availableRooms = 0;
+      if (availableRoomsData.success && Array.isArray(availableRoomsData.data)) {
+        availableRooms = availableRoomsData.data.length;
+      } else if (allRoomsData.success && Array.isArray(allRoomsData.data)) {
+        // Fallback: count rooms with status 'available'
+        availableRooms = allRoomsData.data.filter((room: any) => 
+          room.status === 'available' || room.current_status === 'available'
+        ).length;
+      }
 
       return {
-        totalUsers: 0, // Need a users endpoint
-        availableRooms: Array.isArray(roomsData.data) ? roomsData.data.length : 0,
-        foodItems: Array.isArray(foodData.data) ? foodData.data.length : 0,
-        pendingOrders: Array.isArray(ordersData.data) ? ordersData.data.filter((order: any) => 
-          order.order_status === 'pending'
-        ).length : 0,
-        totalRevenue: 0, // Need revenue endpoint
+        totalUsers: 0, // You'll need to create a users count endpoint
+        availableRooms,
+        foodItems: foodData.success && Array.isArray(foodData.data) ? foodData.data.length : 0,
+        pendingOrders: ordersData.success && Array.isArray(ordersData.data) ? 
+          ordersData.data.filter((order: any) => 
+            order.order_status === 'pending'
+          ).length : 0,
+        totalRevenue: 0, // You'll need a revenue calculation endpoint
         todayReservations
       };
     } catch (error) {

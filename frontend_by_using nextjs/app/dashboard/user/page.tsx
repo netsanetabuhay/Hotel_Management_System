@@ -8,12 +8,14 @@ import { Calendar, ShoppingBag, Bell, Star, MapPin, CreditCard, Loader2, Hotel, 
 import { Badge } from "@/components/ui/badge"
 import { SearchBar } from "@/components/dashboard/SearchBar"
 import { dashboardApi } from "@/lib/api/user-dashboard"
-import { toast } from "sonner"
+import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
+import { adminApi } from "@/lib/api/admin-dashboard"
 
 export default function UserDashboardPage() {
   const { user, token } = useAuth()
   const router = useRouter()
+  const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [dashboardData, setDashboardData] = useState({
     currentStay: null as any,
@@ -34,11 +36,26 @@ export default function UserDashboardPage() {
 
     setIsLoading(true)
     try {
+      // Fetch user's data
       const data = await dashboardApi.getDashboardData(user.user_id, token)
-      setDashboardData(data)
+      
+      // Fetch available rooms for count
+      const rooms = await adminApi.getRooms(token)
+      const availableRooms = rooms.filter((room: any) => 
+        room.status === 'available' || room.current_status === 'available'
+      ).length
+
+      setDashboardData({
+        ...data,
+        availableRooms
+      })
     } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error)
-      toast.error("Failed to load dashboard data")
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data",
+        variant: "destructive"
+      })
     } finally {
       setIsLoading(false)
     }
@@ -65,7 +82,7 @@ export default function UserDashboardPage() {
         <SearchBar />
       </div>
 
-      {/* User Stats */}
+      {/* User Stats - All real data */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* Current Stay */}
         <Card>
@@ -104,7 +121,7 @@ export default function UserDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Active Orders */}
+        {/* Active Orders - Real count */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Active Orders</CardTitle>
@@ -127,7 +144,7 @@ export default function UserDashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Available Rooms */}
+        {/* Available Rooms - Real count */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Available Rooms</CardTitle>
