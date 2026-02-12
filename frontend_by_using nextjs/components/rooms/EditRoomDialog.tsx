@@ -1,7 +1,7 @@
 "use client"
 
 import React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -17,28 +17,47 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { adminApi } from "@/lib/api/admin-dashboard"
 
-interface AddRoomDialogProps {
+interface EditRoomDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onRoomAdded: () => void
+  room: {
+    room_id: string
+    room_number: string
+    room_type: string
+    price: number
+    image_url: string | null
+  } | null
+  onRoomUpdated: () => void
 }
 
-export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialogProps) {
+export function EditRoomDialog({ open, onOpenChange, room, onRoomUpdated }: EditRoomDialogProps) {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     room_number: "",
-    room_type: "deluxe",
+    room_type: "",
     price: "",
     image_url: "",
   })
 
+  useEffect(() => {
+    if (room) {
+      setFormData({
+        room_number: room.room_number,
+        room_type: room.room_type,
+        price: room.price.toString(),
+        image_url: room.image_url || "",
+      })
+    }
+  }, [room])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!room) return
+    
     setIsLoading(true)
     
     try {
-      // Validate price
       const priceValue = parseFloat(formData.price)
       if (isNaN(priceValue) || priceValue <= 0) {
         toast({
@@ -50,7 +69,7 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
         return
       }
 
-      const response = await adminApi.createRoom({
+      await adminApi.updateRoom(room.room_id, {
         room_number: formData.room_number,
         room_type: formData.room_type,
         price: priceValue,
@@ -58,18 +77,17 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
       })
       
       toast({
-        title: "Success",
-        description: `Room ${formData.room_number} has been added successfully.`,
+        title: "✅ Success",
+        description: `Room ${formData.room_number} has been updated successfully.`,
       })
       
-      onRoomAdded()
+      onRoomUpdated()
       onOpenChange(false)
-      setFormData({ room_number: "", room_type: "deluxe", price: "", image_url: "" })
     } catch (error: any) {
-      console.error("Add room error:", error)
+      console.error("Update room error:", error)
       toast({
-        title: "Error",
-        description: error.response?.data?.message || error.message || "Failed to add room",
+        title: "❌ Error",
+        description: error.response?.data?.message || "Failed to update room",
         variant: "destructive"
       })
     } finally {
@@ -77,18 +95,20 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
     }
   }
 
+  if (!room) return null
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add New Room</DialogTitle>
-          <DialogDescription>Enter the details for the new room.</DialogDescription>
+          <DialogTitle>Edit Room {room.room_number}</DialogTitle>
+          <DialogDescription>Update the room details.</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="room_number">Room Number</Label>
+            <Label htmlFor="edit_room_number">Room Number</Label>
             <Input
-              id="room_number"
+              id="edit_room_number"
               placeholder="101"
               value={formData.room_number}
               onChange={(e) => setFormData({ ...formData, room_number: e.target.value })}
@@ -97,9 +117,9 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="room_type">Room Type</Label>
+            <Label htmlFor="edit_room_type">Room Type</Label>
             <Select value={formData.room_type} onValueChange={(value) => setFormData({ ...formData, room_type: value })}>
-              <SelectTrigger id="room_type">
+              <SelectTrigger id="edit_room_type">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -113,9 +133,9 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="price">Price per Night ($)</Label>
+            <Label htmlFor="edit_price">Price per Night ($)</Label>
             <Input
-              id="price"
+              id="edit_price"
               type="number"
               step="0.01"
               min="0.01"
@@ -127,9 +147,9 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="image_url">Image URL (Optional)</Label>
+            <Label htmlFor="edit_image_url">Image URL (Optional)</Label>
             <Input
-              id="image_url"
+              id="edit_image_url"
               placeholder="https://example.com/room.jpg"
               value={formData.image_url}
               onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
@@ -141,7 +161,7 @@ export function AddRoomDialog({ open, onOpenChange, onRoomAdded }: AddRoomDialog
               Cancel
             </Button>
             <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Adding..." : "Add Room"}
+              {isLoading ? "Updating..." : "Update Room"}
             </Button>
           </DialogFooter>
         </form>

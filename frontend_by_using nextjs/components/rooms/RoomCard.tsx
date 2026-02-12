@@ -6,14 +6,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 
-// Updated Room interface to match your component props
 interface RoomCardProps {
   room: {
     id: string
     number: string
     type: string
     price: number
-    status: string
+    status: string  // This is current_status from RoomsPage
     image: string
     floor?: string
     capacity?: number
@@ -23,6 +22,7 @@ interface RoomCardProps {
   onEdit: () => void
   onDelete: () => void
   isAdmin: boolean
+  isDeleting?: boolean
 }
 
 const amenityIcons: Record<string, React.ElementType> = {
@@ -50,7 +50,34 @@ const typeColors: Record<string, string> = {
   penthouse: "bg-emerald-100 text-emerald-700",
 }
 
-export function RoomCard({ room, onView, onEdit, onDelete, isAdmin }: RoomCardProps) {
+export function RoomCard({ 
+  room, 
+  onView, 
+  onEdit, 
+  onDelete, 
+  isAdmin,
+  isDeleting = false
+}: RoomCardProps) {
+  
+  // ✅ Capacity based on room type
+  let capacity = 2;
+  const roomType = room.type?.toLowerCase() || '';
+  
+  if (roomType === 'single') {
+    capacity = 1;
+  } else if (roomType === 'double') {
+    capacity = 2;
+  } else if (roomType === 'deluxe') {
+    capacity = 2;
+  } else if (roomType === 'suite') {
+    capacity = 3;
+  } else if (roomType === 'penthouse') {
+    capacity = 4;
+  }
+
+  // ✅ Use the status directly from props - this is already current_status!
+  const displayStatus = room.status;
+
   return (
     <Card className="overflow-hidden hover:shadow-md transition-shadow">
       <div className="aspect-video bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
@@ -62,23 +89,24 @@ export function RoomCard({ room, onView, onEdit, onDelete, isAdmin }: RoomCardPr
             <h3 className="font-semibold text-lg text-foreground">Room {room.number}</h3>
             <p className="text-sm text-muted-foreground capitalize">Floor {room.floor || '1'}</p>
           </div>
-          <Badge className={statusColors[room.status] || "bg-gray-100 text-gray-700"} variant="secondary">
-            {room.status}
+          {/* ✅ NOW SHOWS CORRECT STATUS - "booked" for room 107, "available" for others */}
+          <Badge className={statusColors[displayStatus] || "bg-gray-100 text-gray-700"} variant="secondary">
+            {displayStatus}
           </Badge>
         </div>
 
         <div className="flex items-center gap-2 mb-3">
-          <Badge className={typeColors[room.type] || "bg-gray-100 text-gray-700"} variant="secondary">
+          <Badge className={typeColors[room.type?.toLowerCase()] || "bg-gray-100 text-gray-700"} variant="secondary">
             {room.type}
           </Badge>
           <div className="flex items-center gap-1 text-sm text-muted-foreground">
             <Users className="h-4 w-4" />
-            <span>{room.capacity || 2}</span>
+            <span>{capacity}</span>
           </div>
         </div>
 
         <div className="flex flex-wrap gap-1 mb-4">
-          {room.amenities && room.amenities.slice(0, 4).map((amenity) => {
+          {room.amenities?.slice(0, 4).map((amenity) => {
             const Icon = amenityIcons[amenity] || Wifi
             return (
               <div
@@ -113,8 +141,18 @@ export function RoomCard({ room, onView, onEdit, onDelete, isAdmin }: RoomCardPr
                   <Edit2 className="h-4 w-4" />
                   <span className="sr-only">Edit room</span>
                 </Button>
-                <Button variant="ghost" size="icon" onClick={onDelete} className="text-destructive hover:text-destructive">
-                  <Trash2 className="h-4 w-4" />
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={onDelete}
+                  disabled={isDeleting}
+                  className="text-destructive hover:text-destructive disabled:opacity-50"
+                >
+                  {isDeleting ? (
+                    <span className="h-4 w-4 animate-spin">⏳</span>
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
                   <span className="sr-only">Delete room</span>
                 </Button>
               </>

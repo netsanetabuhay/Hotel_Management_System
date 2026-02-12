@@ -52,17 +52,42 @@ export const adminApi = {
   },
 
   // ============= ROOM MANAGEMENT =============
-  // ✅ Get available rooms - THIS WORKS WITH YOUR BACKEND
+  // ✅ FIXED: Get available rooms with ALL required fields
   getAvailableRooms: async () => {
     const response = await api.get('/rooms/available');
-    return response.data?.data || [];
+    let rooms = response.data?.data || [];
+    
+    // ✅ Ensure EVERY room has ALL fields needed for the frontend
+    rooms = rooms.map((room: any) => ({
+      room_id: room.room_id,
+      room_number: room.room_number,
+      room_type: room.room_type,
+      price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
+      image_url: room.image_url || null,
+      status: room.status || 'available',
+      current_status: room.current_status || room.status || 'available'
+    }));
+    
+    return rooms;
   },
 
-  // ✅ Get all rooms - THIS USES THE WORKING ENDPOINT
-  // Since your backend doesn't have /rooms, we use /rooms/available for now
+  // ✅ FIXED: Get all rooms with ALL required fields
   getAllRooms: async () => {
     const response = await api.get('/rooms/available');
-    return response.data?.data || [];
+    let rooms = response.data?.data || [];
+    
+    // ✅ Ensure EVERY room has ALL fields needed for the frontend
+    rooms = rooms.map((room: any) => ({
+      room_id: room.room_id,
+      room_number: room.room_number,
+      room_type: room.room_type,
+      price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
+      image_url: room.image_url || null,
+      status: room.status || 'available',
+      current_status: room.current_status || room.status || 'available'
+    }));
+    
+    return rooms;
   },
 
   // ✅ Alias for backward compatibility
@@ -70,26 +95,77 @@ export const adminApi = {
     return adminApi.getAllRooms();
   },
 
+  // ✅ FIXED: Create room with ALL required fields
   createRoom: async (roomData: any) => {
     const response = await api.post('/rooms', roomData);
-    return response.data?.data || null;
+    
+    // Get the created room data
+    let createdRoom = response.data?.data || null;
+    
+    // ✅ CRITICAL FIX: Add ALL missing fields that frontend expects
+    if (createdRoom) {
+      createdRoom = {
+        room_id: createdRoom.room_id,
+        room_number: createdRoom.room_number,
+        room_type: createdRoom.room_type,
+        price: typeof createdRoom.price === 'string' ? parseFloat(createdRoom.price) : createdRoom.price,
+        image_url: createdRoom.image_url || null,
+        status: createdRoom.status || 'available',
+        current_status: createdRoom.current_status || createdRoom.status || 'available'
+      };
+      
+      console.log('✅ Room created successfully:', createdRoom.room_number);
+    }
+    
+    return createdRoom;
   },
 
+  // ✅ FIXED: Update room with ALL required fields
   updateRoom: async (roomId: string, roomData: any) => {
     const response = await api.patch(`/rooms/${roomId}`, roomData);
-    return response.data?.data || null;
+    
+    let updatedRoom = response.data?.data || null;
+    
+    if (updatedRoom) {
+      updatedRoom = {
+        room_id: updatedRoom.room_id,
+        room_number: updatedRoom.room_number,
+        room_type: updatedRoom.room_type,
+        price: typeof updatedRoom.price === 'string' ? parseFloat(updatedRoom.price) : updatedRoom.price,
+        image_url: updatedRoom.image_url || null,
+        status: updatedRoom.status || 'available',
+        current_status: updatedRoom.current_status || updatedRoom.status || 'available'
+      };
+    }
+    
+    return updatedRoom;
   },
 
+  // ✅ Delete room
   deleteRoom: async (roomId: string) => {
     const response = await api.delete(`/rooms/${roomId}`);
     return response.data;
   },
 
+  // ✅ FIXED: Search rooms with ALL required fields
   searchRooms: async (param: string) => {
     const response = await api.get(`/rooms/search/${param}`);
-    return response.data?.data || [];
+    let rooms = response.data?.data || [];
+    
+    rooms = rooms.map((room: any) => ({
+      room_id: room.room_id,
+      room_number: room.room_number,
+      room_type: room.room_type,
+      price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
+      image_url: room.image_url || null,
+      status: room.status || 'available',
+      current_status: room.current_status || room.status || 'available'
+    }));
+    
+    return rooms;
   },
 
+  // ✅ Get room statistics
   getRoomStats: async () => {
     const response = await api.get('/rooms/stats/overview');
     return response.data?.data || null;
@@ -129,7 +205,7 @@ export const adminApi = {
         reservationsRes,
         roomStatsRes,
       ] = await Promise.allSettled([
-        adminApi.getAllRooms(),  // ✅ Uses /rooms/available
+        adminApi.getAllRooms(),
         api.get('/room-orders', {
           params: { 
             check_in_from: new Date().toISOString().split('T')[0],
@@ -189,7 +265,7 @@ export const adminApi = {
 
   getRoomStatus: async (): Promise<RoomStatus> => {
     try {
-      const rooms = await adminApi.getAllRooms()  // ✅ Uses /rooms/available
+      const rooms = await adminApi.getAllRooms()
       
       return {
         total: rooms.length,

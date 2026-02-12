@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { RoomCard } from "@/components/rooms/RoomCard"
 import { AddRoomDialog } from "@/components/rooms/AddRoomDialog"
+import { EditRoomDialog } from "@/components/rooms/EditRoomDialog"
 import { RoomDetailsDialog } from "@/components/rooms/RoomDetailsDialog"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
@@ -28,13 +29,18 @@ export default function RoomsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const isAdmin = user?.role === "admin"
+  console.log('👑 Admin status:', isAdmin, 'User role:', user?.role)
+  
   const [isLoading, setIsLoading] = useState(true)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [rooms, setRooms] = useState<Room[]>([])
 
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [roomToEdit, setRoomToEdit] = useState<Room | null>(null)
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
 
@@ -45,9 +51,21 @@ export default function RoomsPage() {
   const fetchRooms = async () => {
     try {
       setIsLoading(true)
-      // ✅ Since your backend doesn't have /rooms, use /rooms/available for now
       const data = await adminApi.getAvailableRooms()
-      setRooms(data)
+      
+      // ✅ ENSURE every room has ALL required fields
+      const formattedRooms = data.map((room: any) => ({
+        room_id: room.room_id,
+        room_number: room.room_number,
+        room_type: room.room_type,
+        price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
+        image_url: room.image_url || null,
+        status: room.status || 'available',
+        current_status: room.current_status || room.status || 'available'
+      }))
+      
+      console.log('✅ Rooms loaded:', formattedRooms.length)
+      setRooms(formattedRooms)
     } catch (error) {
       console.error('Error fetching rooms:', error)
       toast({
@@ -73,25 +91,79 @@ export default function RoomsPage() {
   }
 
   const handleEdit = (room: Room) => {
-    toast({
-      title: "Edit mode",
-      description: `Editing room ${room.room_number}`,
-    })
+    setRoomToEdit(room)
+    setEditDialogOpen(true)
   }
 
   const handleDelete = async (room: Room) => {
-    if (!isAdmin) return
-    try {
-      await adminApi.deleteRoom(room.room_id)
+    if (!isAdmin) {
       toast({
-        title: "Room deleted",
-        description: `Room ${room.room_number} has been deleted.`,
+        title: "Unauthorized",
+        description: "Only administrators can delete rooms.",
+        variant: "destructive"
+      })
+      return
+    }
+    
+    const result = window.confirm(`⚠️ Are you sure you want to delete Room ${room.room_number}?\n\nThis action cannot be undone.`)
+    
+    if (!result) {
+      toast({
+        title: "Cancelled",
+        description: `Room ${room.room_number} was not deleted.`,
+      })
+      return
+    }
+    
+    try {
+      setIsDeleting(true)
+      await adminApi.deleteRoom(room.room_id)
+      
+      toast({
+        title: "✅ Success",
+        description: `Room ${room.room_number} has been permanently deleted.`,
+      })
+      
+      fetchRooms()
+      
+    } catch (error: any) {
+      console.error("Delete room error:", error)
+      
+      let errorMessage = "Failed to delete room"
+      
+      if (error.response?.status === 400) {
+        errorMessage = error.response?.data?.message || "Cannot delete room with active reservations"
+      } else if (error.response?.status === 401) {
+        errorMessage = "You are not authorized to delete rooms"
+      } else if (error.response?.status === 404) {
+        errorMessage = "Room not found"
+      }
+      
+      toast({
+        title: "❌ Error",
+        description: errorMessage,
+        variant: "destructive"
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
+  const handleUpdateRoom = async (roomId: string, roomData: any) => {
+    try {
+      await adminApi.updateRoom(roomId, roomData)
+      toast({
+        title: "✅ Success",
+        description: `Room ${roomData.room_number} has been updated.`,
       })
       fetchRooms()
+      setEditDialogOpen(false)
+      setRoomToEdit(null)
     } catch (error: any) {
+      console.error("Update room error:", error)
       toast({
-        title: "Error",
-        description: error.response?.data?.message || "Failed to delete room",
+        title: "❌ Error",
+        description: error.response?.data?.message || "Failed to update room",
         variant: "destructive"
       })
     }
@@ -185,6 +257,7 @@ export default function RoomsPage() {
             onEdit={() => handleEdit(room)}
             onDelete={() => handleDelete(room)}
             isAdmin={isAdmin}
+            isDeleting={isDeleting}
           />
         ))}
       </div>
@@ -203,6 +276,13 @@ export default function RoomsPage() {
         open={addDialogOpen} 
         onOpenChange={setAddDialogOpen}
         onRoomAdded={fetchRooms}
+      />
+      
+      <EditRoomDialog
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        room={roomToEdit}
+        onRoomUpdated={fetchRooms}
       />
       
       <RoomDetailsDialog 
