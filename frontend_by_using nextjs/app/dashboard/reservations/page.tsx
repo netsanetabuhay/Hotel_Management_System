@@ -1,71 +1,56 @@
 "use client"
 
-import React from "react"
-import { useState, useEffect } from "react"
-import { Plus, Loader2 } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { useToast } from "@/hooks/use-toast"
-import { useAuth } from "@/lib/auth-context"
-import { adminApi } from "@/lib/api/admin-dashboard"
+import React, { useState, useEffect } from 'react'
+import { Plus, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/lib/auth-context'
+import { useToast } from '@/hooks/use-toast'
+import { adminApi } from '@/lib/api/admin-dashboard'
 
 // Import components
-import { ReservationStats } from "@/components/reservations/ReservationStats"
-import { ReservationFilters } from "@/components/reservations/ReservationFilters"
-import { ReservationsTable } from "@/components/reservations/ReservationsTable"
-import { ReservationDetailsDialog } from "@/components/reservations/ReservationDetailsDialog"
-import { NewReservationDialog } from "@/components/reservations/NewReservationDialog"
-import { EditReservationDialog } from "@/components/reservations/EditReservationDialog"
+import { FoodMenuStats } from '@/components/food-menu/FoodMenuStats'
+import { FoodMenuFilters } from '@/components/food-menu/FoodMenuFilters'
+import { FoodMenuGrid } from '@/components/food-menu/FoodMenuGrid'
+import { FoodItemDialog } from '@/components/food-menu/FoodItemDialog'
+import { FoodItemViewDialog } from '@/components/food-menu/FoodItemViewDialog'
+import { EmptyFoodMenu } from '@/components/food-menu/EmptyFoodMenu'
+import type { FoodItem } from '@/components/food-menu/FoodMenuCard'
 
-// Define Reservation type
-export interface Reservation {
-  room_order_id: string
-  user_id: string
-  room_id: string
-  check_in: string
-  check_out: string
-  status: 'booked' | 'active' | 'completed' | 'cancelled'
-  payment_status: 'paid' | 'unpaid'
-  created_at: string
-  room_number?: string
-  room_type?: string
-  guest_name?: string
-  guest_email?: string
-  total_price?: number
-}
-
-export default function ReservationsPage() {
+export default function FoodMenuPage() {
   const { user } = useAuth()
   const { toast } = useToast()
-  const isAdmin = user?.role === "admin" || user?.role === "receptionist"
+  const isAdmin = user?.role === 'admin'
   
   const [isLoading, setIsLoading] = useState(true)
-  const [reservations, setReservations] = useState<Reservation[]>([])
+  const [foodItems, setFoodItems] = useState<FoodItem[]>([])
+  const [categories, setCategories] = useState<string[]>([])
   
   // Filter states
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('all')
   
   // Dialog states
-  const [newDialogOpen, setNewDialogOpen] = useState(false)
-  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
+  const [viewDialogOpen, setViewDialogOpen] = useState(false)
+  const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null)
 
-  // Fetch reservations
+  // Fetch data
   useEffect(() => {
-    fetchReservations()
+    fetchFoodItems()
+    fetchCategories()
   }, [])
 
-  const fetchReservations = async () => {
+  const fetchFoodItems = async () => {
     try {
       setIsLoading(true)
-      const data = await adminApi.getReservations()
-      setReservations(data)
+      const items = await adminApi.getFoodItems()
+      setFoodItems(items)
     } catch (error) {
-      console.error('Error fetching reservations:', error)
+      console.error('Error fetching food items:', error)
       toast({
         title: "Error",
-        description: "Failed to load reservations",
+        description: "Failed to load food items",
         variant: "destructive"
       })
     } finally {
@@ -73,74 +58,74 @@ export default function ReservationsPage() {
     }
   }
 
-  // Filter reservations based on role and search
-  const userReservations = isAdmin
-    ? reservations
-    : reservations.filter((r) => r.user_id === user?.user_id)
+  const fetchCategories = async () => {
+    try {
+      const cats = await adminApi.getFoodCategories()
+      setCategories(cats)
+    } catch (error) {
+      console.error('Error fetching categories:', error)
+    }
+  }
 
-  const filteredReservations = userReservations.filter((reservation) => {
-    const matchesSearch = 
-      reservation.room_number?.toLowerCase().includes(search.toLowerCase()) ||
-      reservation.room_order_id.toLowerCase().includes(search.toLowerCase()) ||
-      (isAdmin && reservation.guest_name?.toLowerCase().includes(search.toLowerCase())) ||
-      false
-    
-    const matchesStatus = statusFilter === "all" || reservation.status === statusFilter
-    return matchesSearch && matchesStatus
+  // Filter items
+  const filteredItems = foodItems.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) ||
+                         item.description?.toLowerCase().includes(search.toLowerCase())
+    const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter
+    return matchesSearch && matchesCategory
   })
 
   // Stats calculation
   const stats = {
-    booked: userReservations.filter(r => r.status === 'booked').length,
-    active: userReservations.filter(r => r.status === 'active').length,
-    checkedIn: userReservations.filter(r => r.status === 'active').length,
-    totalRevenue: userReservations
-      .filter(r => r.payment_status === 'paid')
-      .reduce((sum, r) => sum + (r.total_price || 0), 0)
+    totalItems: foodItems.length,
+    totalCategories: categories.length,
+    averagePrice: foodItems.length > 0 
+      ? foodItems.reduce((sum, item) => sum + item.price, 0) / foodItems.length 
+      : 0
   }
 
   // Handlers
-  const handleView = (reservation: Reservation) => {
-    setSelectedReservation(reservation)
-    setDetailsDialogOpen(true)
+  const handleView = (item: FoodItem) => {
+    setSelectedItem(item)
+    setViewDialogOpen(true)
   }
 
-  const handleEdit = (reservation: Reservation) => {
-    setSelectedReservation(reservation)
+  const handleEdit = (item: FoodItem) => {
+    setSelectedItem(item)
     setEditDialogOpen(true)
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this reservation?")) return
-    
+  const handleDelete = async (item: FoodItem) => {
+    if (!confirm(`Are you sure you want to delete "${item.name}"?`)) return
+
     try {
-      await adminApi.deleteReservation(id)
+      await adminApi.deleteFoodItem(item.food_id)
       toast({
         title: "Success",
-        description: "Reservation deleted successfully",
+        description: "Food item deleted successfully",
       })
-      fetchReservations()
-    } catch (error) {
+      await fetchFoodItems()
+      await fetchCategories()
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to delete reservation",
+        description: error.response?.data?.message || "Failed to delete food item",
         variant: "destructive"
       })
     }
   }
 
-  const handleStatusChange = async (id: string, status: string) => {
-    try {
-      await adminApi.updateReservation(id, { status })
-      toast({
-        title: "Success",
-        description: `Reservation status updated to ${status}`,
-      })
-      fetchReservations()
-    } catch (error) {
-      throw error
-    }
+  const handleAddNew = () => {
+    setSelectedItem(null)
+    setAddDialogOpen(true)
   }
+
+  const handleSuccess = () => {
+    fetchFoodItems()
+    fetchCategories()
+  }
+
+  const hasFilters = search !== '' || categoryFilter !== 'all'
 
   if (isLoading) {
     return (
@@ -155,70 +140,81 @@ export default function ReservationsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Reservations</h1>
-          <p className="text-muted-foreground mt-1">
-            {isAdmin ? "Manage all hotel reservations" : "View your reservations"}
-          </p>
+          <h1 className="text-3xl font-bold text-foreground">Food Menu</h1>
+          <p className="text-muted-foreground mt-1">Manage restaurant menu items</p>
         </div>
         {isAdmin && (
-          <Button onClick={() => setNewDialogOpen(true)}>
+          <Button onClick={handleAddNew}>
             <Plus className="h-4 w-4 mr-2" />
-            New Reservation
+            Add Food Item
           </Button>
         )}
       </div>
 
-      {/* Stats Cards */}
-      <ReservationStats
-        booked={stats.booked}
-        active={stats.active}
-        checkedIn={stats.checkedIn}
-        totalRevenue={stats.totalRevenue}
+      {/* Stats */}
+      <FoodMenuStats
+        totalItems={stats.totalItems}
+        totalCategories={stats.totalCategories}
+        averagePrice={stats.averagePrice}
         isAdmin={isAdmin}
       />
 
       {/* Filters */}
-      <ReservationFilters
+      <FoodMenuFilters
         search={search}
         onSearchChange={setSearch}
-        statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
-        isAdmin={isAdmin}
+        categoryFilter={categoryFilter}
+        onCategoryFilterChange={setCategoryFilter}
+        categories={categories}
       />
 
-      {/* Reservations Table */}
-      <ReservationsTable
-        reservations={filteredReservations}
-        onView={handleView}
-        onEdit={isAdmin ? handleEdit : undefined}
-        onDelete={isAdmin ? handleDelete : undefined}
-        isAdmin={isAdmin}
-      />
-
-      {/* Dialogs */}
-      <NewReservationDialog
-        open={newDialogOpen}
-        onOpenChange={setNewDialogOpen}
-        onReservationCreated={fetchReservations}
-      />
-
-      <ReservationDetailsDialog
-        reservation={selectedReservation}
-        open={detailsDialogOpen}
-        onOpenChange={setDetailsDialogOpen}
-        onStatusChange={handleStatusChange}
-      />
-
-      {isAdmin && selectedReservation && (
-        <EditReservationDialog
-          open={editDialogOpen}
-          onOpenChange={setEditDialogOpen}
-          reservationId={selectedReservation.room_order_id}
-          currentStatus={selectedReservation.status}
-          currentPaymentStatus={selectedReservation.payment_status}
-          onReservationUpdated={fetchReservations}
+      {/* Food Items Grid or Empty State */}
+      {filteredItems.length === 0 ? (
+        <EmptyFoodMenu
+          onAddClick={handleAddNew}
+          isAdmin={isAdmin}
+          hasFilters={hasFilters}
+        />
+      ) : (
+        <FoodMenuGrid
+          items={filteredItems}
+          onView={handleView}
+          onEdit={isAdmin ? handleEdit : undefined}
+          onDelete={isAdmin ? handleDelete : undefined}
+          isAdmin={isAdmin}
         />
       )}
+
+      {/* Add/Edit Dialog */}
+      <FoodItemDialog
+        open={addDialogOpen || editDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAddDialogOpen(false)
+            setEditDialogOpen(false)
+            setSelectedItem(null)
+          }
+        }}
+        item={selectedItem}
+        categories={categories}
+        onSuccess={handleSuccess}
+      />
+
+      {/* ✅ View Dialog - FIXED with proper onEdit handler */}
+      <FoodItemViewDialog
+        item={selectedItem}
+        open={viewDialogOpen}
+        onOpenChange={setViewDialogOpen}
+        onEdit={() => {
+          // Close view dialog first
+          setViewDialogOpen(false)
+          // Then open edit dialog with the same item
+          if (selectedItem) {
+            setEditDialogOpen(true)
+          }
+        }}
+        isAdmin={isAdmin}
+      />
     </div>
   )
 }

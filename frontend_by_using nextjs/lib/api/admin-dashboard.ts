@@ -29,6 +29,16 @@ export interface RoomStatus {
   cleaning: number
 }
 
+// ✅ Add FoodItem interface
+export interface FoodItem {
+  food_id: string
+  name: string
+  category: string
+  price: number
+  description: string | null
+  image_url: string | null
+}
+
 export const adminApi = {
   // ============= USER MANAGEMENT =============
   getUsers: async () => {
@@ -52,12 +62,10 @@ export const adminApi = {
   },
 
   // ============= ROOM MANAGEMENT =============
-  // ✅ FIXED: Get available rooms with ALL required fields
   getAvailableRooms: async () => {
     const response = await api.get('/rooms/available');
     let rooms = response.data?.data || [];
     
-    // ✅ Ensure EVERY room has ALL fields needed for the frontend
     rooms = rooms.map((room: any) => ({
       room_id: room.room_id,
       room_number: room.room_number,
@@ -71,12 +79,10 @@ export const adminApi = {
     return rooms;
   },
 
-  // ✅ FIXED: Get all rooms with ALL required fields
   getAllRooms: async () => {
     const response = await api.get('/rooms/available');
     let rooms = response.data?.data || [];
     
-    // ✅ Ensure EVERY room has ALL fields needed for the frontend
     rooms = rooms.map((room: any) => ({
       room_id: room.room_id,
       room_number: room.room_number,
@@ -90,19 +96,15 @@ export const adminApi = {
     return rooms;
   },
 
-  // ✅ Alias for backward compatibility
   getRooms: async () => {
     return adminApi.getAllRooms();
   },
 
-  // ✅ FIXED: Create room with ALL required fields
   createRoom: async (roomData: any) => {
     const response = await api.post('/rooms', roomData);
     
-    // Get the created room data
     let createdRoom = response.data?.data || null;
     
-    // ✅ CRITICAL FIX: Add ALL missing fields that frontend expects
     if (createdRoom) {
       createdRoom = {
         room_id: createdRoom.room_id,
@@ -113,14 +115,11 @@ export const adminApi = {
         status: createdRoom.status || 'available',
         current_status: createdRoom.current_status || createdRoom.status || 'available'
       };
-      
-      console.log('✅ Room created successfully:', createdRoom.room_number);
     }
     
     return createdRoom;
   },
 
-  // ✅ FIXED: Update room with ALL required fields
   updateRoom: async (roomId: string, roomData: any) => {
     const response = await api.patch(`/rooms/${roomId}`, roomData);
     
@@ -141,13 +140,11 @@ export const adminApi = {
     return updatedRoom;
   },
 
-  // ✅ Delete room
   deleteRoom: async (roomId: string) => {
     const response = await api.delete(`/rooms/${roomId}`);
     return response.data;
   },
 
-  // ✅ FIXED: Search rooms with ALL required fields
   searchRooms: async (param: string) => {
     const response = await api.get(`/rooms/search/${param}`);
     let rooms = response.data?.data || [];
@@ -165,7 +162,6 @@ export const adminApi = {
     return rooms;
   },
 
-  // ✅ Get room statistics
   getRoomStats: async () => {
     const response = await api.get('/rooms/stats/overview');
     return response.data?.data || null;
@@ -197,6 +193,119 @@ export const adminApi = {
     return response.data?.data || null;
   },
 
+  // ============= FOOD MANAGEMENT =============
+  // ✅ FIXED: Get all food items - matches your backend
+  // ============= FOOD MANAGEMENT =============
+getFoodItems: async (): Promise<FoodItem[]> => {
+  try {
+    const response = await api.get('/food-items');
+    let items = response.data?.data || [];
+    
+    // ✅ Convert price from string to number
+    items = items.map((item: any) => ({
+      ...item,
+      price: typeof item.price === 'string' ? parseFloat(item.price) : item.price
+    }));
+    
+    return items;
+  } catch (error) {
+    console.error('Error fetching food items:', error);
+    return [];
+  }
+},
+
+
+//get food orders
+getFoodOrders: async (filters?: any) => {
+  try {
+    const response = await api.get('/food-orders', { params: filters });
+    return response.data?.data || [];
+  } catch (error) {
+    console.error('Error fetching food orders:', error);
+    return [];
+  }
+},
+
+//
+getFoodOrderStats: async () => {
+  try {
+    const response = await api.get('/food-orders/stats/overview');
+    return response.data?.data || null;
+  } catch (error) {
+    console.error('Error fetching food order stats:', error);
+    return null;
+  }
+},
+
+updateFoodOrderStatus: async (orderId: string, status: string) => {
+  try {
+    const response = await api.patch(`/food-orders/${orderId}`, { order_status: status });
+    return response.data?.data || null;
+  } catch (error) {
+    console.error('Error updating food order:', error);
+    throw error;
+  }
+},
+
+  // ✅ FIXED: Get food categories - matches your backend
+ getFoodCategories: async (): Promise<string[]> => {
+  try {
+    const response = await api.get('/food-items/categories');
+    // Your backend returns { success: true, message: "...", data: [...] }
+    return response.data?.data || [];
+  } catch (error) {
+    console.error('Error fetching food categories:', error);
+    return [];
+  }
+},
+
+  // ✅ FIXED: Create food item (admin only)
+  createFoodItem: async (foodData: any): Promise<FoodItem | null> => {
+    try {
+      const response = await api.post('/food-items', foodData);
+      return response.data?.data || null;
+    } catch (error) {
+      console.error('Error creating food item:', error);
+      throw error;
+    }
+  },
+
+  // ✅ FIXED: Update food item (admin only)
+  updateFoodItem: async (foodId: string, foodData: any): Promise<FoodItem | null> => {
+    try {
+      const response = await api.patch(`/food-items/${foodId}`, foodData);
+      return response.data?.data || null;
+    } catch (error) {
+      console.error('Error updating food item:', error);
+      throw error;
+    }
+  },
+
+  // ✅ FIXED: Delete food item (admin only)
+  deleteFoodItem: async (foodId: string) => {
+    try {
+      const response = await api.delete(`/food-items/${foodId}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error deleting food item:', error);
+      throw error;
+    }
+  },
+
+  // ✅ FIXED: Upload image
+  uploadImage: async (file: File, type: string) => {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('type', type);
+    
+    const response = await api.post('/uploads', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
   // ============= DASHBOARD STATISTICS =============
   getDashboardStats: async (): Promise<DashboardStats> => {
     try {
@@ -204,6 +313,7 @@ export const adminApi = {
         roomsRes,
         reservationsRes,
         roomStatsRes,
+        foodItemsRes
       ] = await Promise.allSettled([
         adminApi.getAllRooms(),
         api.get('/room-orders', {
@@ -213,11 +323,13 @@ export const adminApi = {
           }
         }),
         api.get('/rooms/stats/overview'),
+        adminApi.getFoodItems() // ✅ Add food items count to dashboard
       ])
 
       let availableRooms = 0
       let totalRooms = 0
       let occupiedRooms = 0
+      let foodItemsCount = 0
       
       if (roomsRes.status === 'fulfilled') {
         const rooms = roomsRes.value || []
@@ -235,6 +347,10 @@ export const adminApi = {
         ).length
       }
 
+      if (foodItemsRes.status === 'fulfilled') {
+        foodItemsCount = foodItemsRes.value?.length || 0;
+      }
+
       let todayReservations = 0
       if (reservationsRes.status === 'fulfilled' && reservationsRes.value.data?.success) {
         const reservations = reservationsRes.value.data.data || []
@@ -248,7 +364,7 @@ export const adminApi = {
       return {
         totalUsers: 0,
         availableRooms: availableRooms,
-        foodItems: 0,
+        foodItems: foodItemsCount, // ✅ Now shows real food items count
         pendingOrders: 0,
         totalRevenue: 0,
         todayReservations: todayReservations,
@@ -291,11 +407,7 @@ export const adminApi = {
     }
   },
 
-  // ============= FOOD MANAGEMENT =============
-  getFoodItems: async () => {
-    return []
-  },
-
+  // ============= PENDING ORDERS =============
   getPendingOrders: async () => {
     return []
   },
