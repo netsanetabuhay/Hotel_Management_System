@@ -10,17 +10,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import type { Room } from "@/lib/mock-data"
 
 const statusColors: Record<string, string> = {
   available: "bg-emerald-100 text-emerald-700",
   occupied: "bg-blue-100 text-blue-700",
+  booked: "bg-amber-100 text-amber-700",
   reserved: "bg-amber-100 text-amber-700",
   maintenance: "bg-gray-100 text-gray-700",
+  cleaning: "bg-purple-100 text-purple-700",
 }
 
 interface RoomDetailsDialogProps {
-  room: Room | null
+  room: {
+    id: string
+    number: string
+    type: string
+    price: number
+    status: string
+    image: string
+    floor?: string
+    capacity?: number
+    amenities?: string[]
+  } | null
   open: boolean
   onOpenChange: (open: boolean) => void
 }
@@ -47,28 +58,32 @@ export function RoomDetailsDialog({ room, open, onOpenChange }: RoomDetailsDialo
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Status</p>
-              <Badge className={statusColors[room.status]} variant="secondary">
+              <Badge className={statusColors[room.status] || "bg-gray-100 text-gray-700"} variant="secondary">
                 {room.status}
               </Badge>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Floor</p>
-              <p className="font-medium text-foreground">Floor {room.floor}</p>
+              <p className="font-medium text-foreground">Floor {room.floor || '1'}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Capacity</p>
-              <p className="font-medium text-foreground">{room.capacity} guests</p>
+              <p className="font-medium text-foreground">{room.capacity || 2} guests</p>
             </div>
           </div>
 
           <div>
             <p className="text-sm text-muted-foreground mb-2">Amenities</p>
             <div className="flex flex-wrap gap-2">
-              {room.amenities.map((amenity) => (
-                <Badge key={amenity} variant="outline">
-                  {amenity}
-                </Badge>
-              ))}
+              {room.amenities && room.amenities.length > 0 ? (
+                room.amenities.map((amenity) => (
+                  <Badge key={amenity} variant="outline">
+                    {amenity}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-sm text-muted-foreground">No amenities listed</p>
+              )}
             </div>
           </div>
 

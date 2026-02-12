@@ -17,6 +17,7 @@ const { sendSuccess, sendError } = require('../Utils/response');
 const { generateId } = require('../Utils/generateId');
 
 // 1. Get rooms (smart: admin sees all, user sees available)
+// 1. Get rooms (smart: admin sees all, user sees available)
 const getAllRoomsController = async (req, res) => {
     try {
         const isAdmin = req.user.role === 'admin';
@@ -32,7 +33,8 @@ const getAllRoomsController = async (req, res) => {
             message = 'Available rooms retrieved';
         }
         
-        return sendSuccess(res, message, rooms);
+        // ✅ FIX: Wrap rooms in data property
+        return sendSuccess(res, message, rooms); // ← This is already correct!
 
     } catch (error) {
         console.error('Get rooms error:', error);

@@ -4,8 +4,8 @@ const { generateId } = require('../Utils/generateId');
 // 1. Create new room
 const createRoom = async (roomData) => {
     const query = `
-        INSERT INTO rooms (room_id, room_number, room_type, price,image_url)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO rooms (room_id, room_number, room_type, price, image_url)
+        VALUES (?, ?, ?, ?, ?)
     `;
     const [result] = await pool.execute(query, [
         roomData.room_id,
@@ -17,7 +17,7 @@ const createRoom = async (roomData) => {
     return result;
 };
 
-// 2. Get all rooms for ADMIN (including booked ones)
+// 2. ✅ FIXED: Get all rooms for ADMIN (NOW shows ALL rooms, not just available)
 const getAllRoomsForAdmin = async () => {
     const query = `
         SELECT 
@@ -34,17 +34,16 @@ const getAllRoomsForAdmin = async () => {
                     AND ro.status IN ('booked', 'active')
                     AND ro.check_out >= CURDATE()
                 ) THEN 'booked'
-                ELSE 'available'
+                ELSE r.status
             END as current_status
         FROM rooms r
-        WHERE r.status = 'available'
         ORDER BY r.room_number
     `;
     const [rows] = await pool.execute(query);
     return rows;
 };
 
-// 3. Get available rooms for USERS (today's date)
+// 3. Get available rooms for USERS (today's date) - NO CHANGE
 const getAvailableRoomsForUsers = async () => {
     const today = new Date().toISOString().split('T')[0];
     const query = `
@@ -73,11 +72,10 @@ const getAvailableRoomsForUsers = async () => {
     return rows;
 };
 
-// 4. Search available rooms by parameter
+// 4. Search available rooms by parameter - NO CHANGE
 const searchAvailableRooms = async (searchParam) => {
     const today = new Date().toISOString().split('T')[0];
     
-    // Try to parse the search parameter
     let query = `
         SELECT 
             r.room_id,
@@ -102,7 +100,6 @@ const searchAvailableRooms = async (searchParam) => {
     
     const params = [today, today, today, today, today, today];
     
-    // Check if searchParam is a price range (e.g., "100-200")
     const priceRangeMatch = searchParam.match(/^(\d+)-(\d+)$/);
     if (priceRangeMatch) {
         const minPrice = parseInt(priceRangeMatch[1]);
@@ -110,12 +107,10 @@ const searchAvailableRooms = async (searchParam) => {
         query += ' AND r.price >= ? AND r.price <= ?';
         params.push(minPrice, maxPrice);
     } 
-    // Check if searchParam is a room type (case-insensitive)
     else if (['deluxe', 'suite', 'standard', 'executive', 'presidential'].includes(searchParam.toLowerCase())) {
         query += ' AND LOWER(r.room_type) = ?';
         params.push(searchParam.toLowerCase());
     }
-    // Otherwise search in room number
     else {
         query += ' AND r.room_number LIKE ?';
         params.push(`%${searchParam}%`);
@@ -127,28 +122,28 @@ const searchAvailableRooms = async (searchParam) => {
     return rows;
 };
 
-// 5. Get room by ID
+// 5. Get room by ID - NO CHANGE
 const getRoomById = async (roomId) => {
     const query = 'SELECT * FROM rooms WHERE room_id = ?';
     const [rows] = await pool.execute(query, [roomId]);
     return rows;
 };
 
-// 6. Check if room number exists
+// 6. Check if room number exists - NO CHANGE
 const checkRoomNumberExists = async (roomNumber) => {
     const query = 'SELECT room_id FROM rooms WHERE room_number = ?';
     const [rows] = await pool.execute(query, [roomNumber]);
     return rows;
 };
 
-// 7. Check if room number exists excluding current room
+// 7. Check if room number exists excluding current room - NO CHANGE
 const checkRoomNumberExistsExcluding = async (roomNumber, excludeRoomId) => {
     const query = 'SELECT room_id FROM rooms WHERE room_number = ? AND room_id != ?';
     const [rows] = await pool.execute(query, [roomNumber, excludeRoomId]);
     return rows;
 };
 
-// 8. Update room
+// 8. Update room - NO CHANGE
 const updateRoom = async (roomId, updateData) => {
     const fields = Object.keys(updateData).map(key => `${key} = ?`).join(', ');
     const values = Object.values(updateData);
@@ -159,14 +154,14 @@ const updateRoom = async (roomId, updateData) => {
     return result;
 };
 
-// 9. Delete room
+// 9. Delete room - NO CHANGE
 const deleteRoom = async (roomId) => {
     const query = 'DELETE FROM rooms WHERE room_id = ?';
     const [result] = await pool.execute(query, [roomId]);
     return result;
 };
 
-// 10. Check if room has active reservations
+// 10. Check if room has active reservations - NO CHANGE
 const checkRoomReservations = async (roomId) => {
     const query = `
         SELECT room_order_id 
@@ -180,26 +175,30 @@ const checkRoomReservations = async (roomId) => {
     return rows;
 };
 
-// 11. Get room statistics
+// 11. ✅ FIXED: Get room statistics (NOW counts ALL rooms, not just available)
 const getRoomStats = async () => {
-    const totalQuery = "SELECT COUNT(*) as total FROM rooms WHERE status = 'available'";
+    // ✅ Count ALL rooms
+    const totalQuery = "SELECT COUNT(*) as total FROM rooms";
     const [totalResult] = await pool.execute(totalQuery);
     
+    // ✅ Group by room type from ALL rooms
     const typeQuery = `
         SELECT room_type, COUNT(*) as count 
         FROM rooms 
-        WHERE status = 'available'
         GROUP BY room_type
         ORDER BY count DESC
     `;
     const [typeResult] = await pool.execute(typeQuery);
     
-    const avgPriceQuery = "SELECT AVG(price) as avg_price FROM rooms WHERE status = 'available'";
+    // ✅ Average price from ALL rooms
+    const avgPriceQuery = "SELECT AVG(price) as avg_price FROM rooms";
     const [avgPriceResult] = await pool.execute(avgPriceQuery);
     
-    const priceRangeQuery = "SELECT MIN(price) as min_price, MAX(price) as max_price FROM rooms WHERE status = 'available'";
+    // ✅ Price range from ALL rooms
+    const priceRangeQuery = "SELECT MIN(price) as min_price, MAX(price) as max_price FROM rooms";
     const [priceRangeResult] = await pool.execute(priceRangeQuery);
     
+    // ✅ Currently booked rooms (NO CHANGE - this is correct)
     const bookedQuery = `
         SELECT COUNT(DISTINCT room_id) as currently_booked
         FROM room_orders 
@@ -221,7 +220,7 @@ const getRoomStats = async () => {
     };
 };
 
-// 12. Get revenue statistics
+// 12. Get revenue statistics - NO CHANGE
 const getRevenueStats = async () => {
     const revenueQuery = `
         SELECT 

@@ -14,7 +14,7 @@ const { authenticate, authorize } = require('../Middleware/auth');
 router.use(authenticate);
 
 // 1. Get rooms (smart: admin sees all, user sees available)
-router.get('/', getAllRoomsController);
+router.get('/available', getAllRoomsController);
 
 // 2. Search available rooms by parameter
 router.get('/search/:param', searchRoomsController);

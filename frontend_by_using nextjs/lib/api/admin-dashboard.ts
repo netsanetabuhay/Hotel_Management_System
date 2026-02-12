@@ -9,6 +9,8 @@ export interface DashboardStats {
   todayReservations: number
   occupancyRate: number
   recentActivities: Activity[]
+  totalRooms: number
+  occupiedRooms: number
 }
 
 export interface Activity {
@@ -28,41 +30,106 @@ export interface RoomStatus {
 }
 
 export const adminApi = {
-  // ✅ Get all users - NO TOKEN PARAMETER
+  // ============= USER MANAGEMENT =============
   getUsers: async () => {
     const response = await api.get('/users');
     return response.data?.data || [];
   },
 
-  // ✅ Create user - NO TOKEN PARAMETER
   createUser: async (userData: any) => {
     const response = await api.post('/users/register', userData);
     return response.data?.data || null;
   },
 
-  // ✅ Delete user - NO TOKEN PARAMETER
   deleteUser: async (userId: string) => {
     const response = await api.delete(`/users/${userId}`);
     return response.data;
   },
 
-  // ✅ Update user - NO TOKEN PARAMETER
   updateUser: async (userId: string, userData: any) => {
     const response = await api.patch(`/users/${userId}`, userData);
     return response.data?.data || null;
   },
 
-  // ✅ Get dashboard stats - NO TOKEN PARAMETER, NO MANUAL HEADERS
+  // ============= ROOM MANAGEMENT =============
+  // ✅ Get available rooms - THIS WORKS WITH YOUR BACKEND
+  getAvailableRooms: async () => {
+    const response = await api.get('/rooms/available');
+    return response.data?.data || [];
+  },
+
+  // ✅ Get all rooms - THIS USES THE WORKING ENDPOINT
+  // Since your backend doesn't have /rooms, we use /rooms/available for now
+  getAllRooms: async () => {
+    const response = await api.get('/rooms/available');
+    return response.data?.data || [];
+  },
+
+  // ✅ Alias for backward compatibility
+  getRooms: async () => {
+    return adminApi.getAllRooms();
+  },
+
+  createRoom: async (roomData: any) => {
+    const response = await api.post('/rooms', roomData);
+    return response.data?.data || null;
+  },
+
+  updateRoom: async (roomId: string, roomData: any) => {
+    const response = await api.patch(`/rooms/${roomId}`, roomData);
+    return response.data?.data || null;
+  },
+
+  deleteRoom: async (roomId: string) => {
+    const response = await api.delete(`/rooms/${roomId}`);
+    return response.data;
+  },
+
+  searchRooms: async (param: string) => {
+    const response = await api.get(`/rooms/search/${param}`);
+    return response.data?.data || [];
+  },
+
+  getRoomStats: async () => {
+    const response = await api.get('/rooms/stats/overview');
+    return response.data?.data || null;
+  },
+
+  // ============= RESERVATION MANAGEMENT =============
+  getReservations: async (filters?: any) => {
+    const response = await api.get('/room-orders', { params: filters });
+    return response.data?.data || [];
+  },
+
+  createReservation: async (reservationData: any) => {
+    const response = await api.post('/room-orders', reservationData);
+    return response.data?.data || null;
+  },
+
+  updateReservation: async (reservationId: string, data: any) => {
+    const response = await api.patch(`/room-orders/${reservationId}`, data);
+    return response.data?.data || null;
+  },
+
+  deleteReservation: async (reservationId: string) => {
+    const response = await api.delete(`/room-orders/${reservationId}`);
+    return response.data;
+  },
+
+  getReservationStats: async () => {
+    const response = await api.get('/room-orders/stats/overview');
+    return response.data?.data || null;
+  },
+
+  // ============= DASHBOARD STATISTICS =============
   getDashboardStats: async (): Promise<DashboardStats> => {
     try {
-      // Fetch all data in parallel - NO headers, NO token!
       const [
         roomsRes,
         reservationsRes,
         roomStatsRes,
-        reservationStatsRes
       ] = await Promise.allSettled([
-        api.get('/rooms'), 
+        adminApi.getAllRooms(),  // ✅ Uses /rooms/available
         api.get('/room-orders', {
           params: { 
             check_in_from: new Date().toISOString().split('T')[0],
@@ -70,16 +137,14 @@ export const adminApi = {
           }
         }),
         api.get('/rooms/stats/overview'),
-        api.get('/room-orders/stats/overview')
       ])
 
-      // Parse ALL rooms response
       let availableRooms = 0
       let totalRooms = 0
       let occupiedRooms = 0
       
-      if (roomsRes.status === 'fulfilled' && roomsRes.value.data?.success) {
-        const rooms = roomsRes.value.data.data || []
+      if (roomsRes.status === 'fulfilled') {
+        const rooms = roomsRes.value || []
         totalRooms = rooms.length
         
         availableRooms = rooms.filter((room: any) => 
@@ -92,33 +157,12 @@ export const adminApi = {
           room.status === 'occupied' || 
           room.current_status === 'occupied'
         ).length
-        
-        console.log('✅ /api/rooms - Total rooms:', totalRooms)
-        console.log('✅ /api/rooms - Available rooms:', availableRooms)
-        console.log('✅ /api/rooms - Occupied rooms:', occupiedRooms)
       }
 
-      // Parse today's reservations
       let todayReservations = 0
       if (reservationsRes.status === 'fulfilled' && reservationsRes.value.data?.success) {
         const reservations = reservationsRes.value.data.data || []
         todayReservations = reservations.length
-      }
-
-      // Parse room stats
-      let roomStats = {
-        total: 0,
-        available: 0,
-        occupied: 0,
-        maintenance: 0,
-        cleaning: 0
-      }
-      
-      if (roomStatsRes.status === 'fulfilled' && roomStatsRes.value.data?.success) {
-        const statsData = roomStatsRes.value.data.data
-        if (statsData?.roomStats) {
-          roomStats = statsData.roomStats
-        }
       }
 
       const occupancyRate = totalRooms > 0 
@@ -133,7 +177,9 @@ export const adminApi = {
         totalRevenue: 0,
         todayReservations: todayReservations,
         occupancyRate: occupancyRate,
-        recentActivities: []
+        recentActivities: [],
+        totalRooms: totalRooms,
+        occupiedRooms: occupiedRooms
       }
     } catch (error) {
       console.error('Error fetching dashboard stats:', error)
@@ -141,40 +187,27 @@ export const adminApi = {
     }
   },
 
-  // ✅ Get room status - NO TOKEN PARAMETER, NO MANUAL HEADERS
   getRoomStatus: async (): Promise<RoomStatus> => {
     try {
-      const response = await api.get('/rooms')
-      
-      if (response.data?.success) {
-        const rooms = response.data.data || []
-        
-        return {
-          total: rooms.length,
-          available: rooms.filter((r: any) => 
-            r.status === 'available' && r.current_status === 'available'
-          ).length,
-          occupied: rooms.filter((r: any) => 
-            r.status === 'booked' || 
-            r.current_status === 'booked' ||
-            r.status === 'occupied' || 
-            r.current_status === 'occupied'
-          ).length,
-          maintenance: rooms.filter((r: any) => 
-            r.status === 'maintenance' || r.current_status === 'maintenance'
-          ).length,
-          cleaning: rooms.filter((r: any) => 
-            r.status === 'cleaning' || r.current_status === 'cleaning'
-          ).length
-        }
-      }
+      const rooms = await adminApi.getAllRooms()  // ✅ Uses /rooms/available
       
       return {
-        total: 0,
-        available: 0,
-        occupied: 0,
-        maintenance: 0,
-        cleaning: 0
+        total: rooms.length,
+        available: rooms.filter((r: any) => 
+          r.status === 'available' && r.current_status === 'available'
+        ).length,
+        occupied: rooms.filter((r: any) => 
+          r.status === 'booked' || 
+          r.current_status === 'booked' ||
+          r.status === 'occupied' || 
+          r.current_status === 'occupied'
+        ).length,
+        maintenance: rooms.filter((r: any) => 
+          r.status === 'maintenance' || r.current_status === 'maintenance'
+        ).length,
+        cleaning: rooms.filter((r: any) => 
+          r.status === 'cleaning' || r.current_status === 'cleaning'
+        ).length
       }
     } catch (error) {
       console.error('Error fetching room status:', error)
@@ -182,82 +215,17 @@ export const adminApi = {
     }
   },
 
-  // ✅ Get all rooms - NO TOKEN PARAMETER
-  getRooms: async () => {
-    const response = await api.get('/rooms')
-    return response.data?.data || []
-  },
-
-  // ✅ Create room - NO TOKEN PARAMETER
-  createRoom: async (roomData: any) => {
-    const response = await api.post('/rooms', roomData)
-    return response.data?.data || null
-  },
-
-  // ✅ Update room - NO TOKEN PARAMETER
-  updateRoom: async (roomId: string, roomData: any) => {
-    const response = await api.patch(`/rooms/${roomId}`, roomData)
-    return response.data?.data || null
-  },
-
-  // ✅ Delete room - NO TOKEN PARAMETER
-  deleteRoom: async (roomId: string) => {
-    const response = await api.delete(`/rooms/${roomId}`)
-    return response.data
-  },
-
-  // ✅ Search rooms - NO TOKEN PARAMETER
-  searchRooms: async (param: string) => {
-    const response = await api.get(`/rooms/search/${param}`)
-    return response.data?.data || []
-  },
-
-  // ✅ Get all reservations - NO TOKEN PARAMETER
-  getReservations: async (filters?: any) => {
-    const response = await api.get('/room-orders', { params: filters })
-    return response.data?.data || []
-  },
-
-  // ✅ Get reservation statistics - NO TOKEN PARAMETER
-  getReservationStats: async () => {
-    const response = await api.get('/room-orders/stats/overview')
-    return response.data?.data || null
-  },
-
-  // ✅ Update reservation - NO TOKEN PARAMETER
-  updateReservation: async (reservationId: string, data: any) => {
-    const response = await api.patch(`/room-orders/${reservationId}`, data)
-    return response.data?.data || null
-  },
-
-  // ✅ Delete reservation - NO TOKEN PARAMETER
-  deleteReservation: async (reservationId: string) => {
-    const response = await api.delete(`/room-orders/${reservationId}`)
-    return response.data
-  },
-
-  // ✅ Create reservation - NO TOKEN PARAMETER
-  createReservation: async (reservationData: any) => {
-    const response = await api.post('/room-orders', reservationData)
-    return response.data?.data || null
-  },
-
-  // ✅ Get available rooms - NO TOKEN PARAMETER
-  getAvailableRooms: async () => {
-    const response = await api.get('/rooms/available')
-    return response.data?.data || []
-  },
-
-  // ⚠️ NEED BACKEND IMPLEMENTATION
-  getRevenueData: async (period: 'week' | 'month' | 'year' = 'week') => {
-    return []
-  },
-
+  // ============= FOOD MANAGEMENT =============
   getFoodItems: async () => {
     return []
   },
 
   getPendingOrders: async () => {
+    return []
+  },
+
+  // ============= REVENUE & ANALYTICS =============
+  getRevenueData: async (period: 'week' | 'month' | 'year' = 'week') => {
     return []
   }
 }

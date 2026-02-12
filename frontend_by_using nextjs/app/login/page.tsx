@@ -20,9 +20,12 @@ export default function LoginPage() {
     setIsLoading(true)
     
     try {
-      await login(email, password) // ✅ USE AUTH CONTEXT LOGIN
+      await login(email, password) 
       toast.success('Login successful!')
-      // ✅ Redirect is handled in auth context
+    
+      
+    
+      
     } catch (error: any) {
       console.error('Login error:', error)
       toast.error(error.message || 'Login failed')

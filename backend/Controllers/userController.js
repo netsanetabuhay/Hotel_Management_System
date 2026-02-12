@@ -17,36 +17,28 @@ const {
     checkUserReservationsInDB,
     checkUserFoodOrdersInDB
 } = require('../Models/userdb.js');
+const { sendSuccess, sendError } = require('../Utils/response'); // ✅ ADD THIS IMPORT
 
 // Register new user
 const registerUser = async (req, res) => {
     try {
-        const { username, email, password, first_name, last_name, phone, role = 'user' } = req.body;
+        const { username, email, password, first_name, last_name, phone } = req.body;
 
         // Validation
         if (!username || !email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Username, email, and password are required'
-            });
+            return sendError(res, 'Username, email, and password are required', 400);
         }
 
         // Check if username already exists
         const existingUsername = await checkUsernameExists(username);
         if (existingUsername.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Username already exists'
-            });
+            return sendError(res, 'Username already exists', 400);
         }
 
         // Check if email already exists
         const existingEmail = await checkEmailExists(email);
         if (existingEmail.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email already exists'
-            });
+            return sendError(res, 'Email already exists', 400);
         }
 
         // Hash password
@@ -65,7 +57,7 @@ const registerUser = async (req, res) => {
             first_name: first_name || null,
             last_name: last_name || null,
             phone: phone || null,
-            role: req.user?.role === 'admin' ? (role || 'user') : 'user'
+            role: 'user'
         };
 
         // Create user in database
@@ -80,19 +72,11 @@ const registerUser = async (req, res) => {
             delete user.password_hash;
         }
 
-        res.status(201).json({
-            success: true,
-            message: 'User registered successfully',
-            data: { user }
-        });
+        return sendSuccess(res, 'User registered successfully', { user }, 201);
 
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error during registration',
-            error: error.message
-        });
+        return sendError(res, 'Server error during registration', 500);
     }
 };
 
@@ -103,20 +87,14 @@ const loginUser = async (req, res) => {
 
         // Validation
         if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email and password are required'
-            });
+            return sendError(res, 'Email and password are required', 400);
         }
 
         // Find user
         const users = await getUserByEmail(email);
         
         if (users.length === 0) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
+            return sendError(res, 'Invalid credentials', 401);
         }
 
         const user = users[0];
@@ -124,10 +102,7 @@ const loginUser = async (req, res) => {
         // Check password
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
+            return sendError(res, 'Invalid credentials', 401);
         }
 
         // Create JWT payload
@@ -144,22 +119,14 @@ const loginUser = async (req, res) => {
         // Remove password from response
         delete user.password_hash;
 
-        res.json({
-            success: true,
-            message: 'Login successful',
-            data: {
-                user,
-                token
-            }
+        return sendSuccess(res, 'Login successful', {
+            user,
+            token
         });
 
     } catch (error) {
         console.error('Login error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error during login',
-            error: error.message
-        });
+        return sendError(res, 'Server error during login', 500);
     }
 };
 
@@ -168,25 +135,17 @@ const getAllUsers = async (req, res) => {
     try {
         const users = await getAllUsersFromDB();
         
-        // Remove passwords from all users
+        // Remove passwords
         const usersWithoutPasswords = users.map(user => {
             const { password_hash, ...userWithoutPassword } = user;
             return userWithoutPassword;
         });
 
-        res.json({
-            success: true,
-            message: 'Users retrieved successfully',
-            data: usersWithoutPasswords
-        });
+        return sendSuccess(res, 'Users retrieved successfully', usersWithoutPasswords);
 
     } catch (error) {
         console.error('Get all users error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving users',
-            error: error.message
-        });
+        return sendError(res, 'Server error retrieving users', 500);
     }
 };
 
@@ -196,10 +155,7 @@ const searchUsersController = async (req, res) => {
         const { search } = req.query;
         
         if (!search) {
-            return res.status(400).json({
-                success: false,
-                message: 'Search query is required'
-            });
+            return sendError(res, 'Search query is required', 400);
         }
 
         const users = await searchUsersInDB(search);
@@ -210,19 +166,11 @@ const searchUsersController = async (req, res) => {
             return userWithoutPassword;
         });
 
-        res.json({
-            success: true,
-            message: 'Search results retrieved',
-            data: usersWithoutPasswords
-        });
+        return sendSuccess(res, 'Search results retrieved', usersWithoutPasswords);
 
     } catch (error) {
         console.error('Search users error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error searching users',
-            error: error.message
-        });
+        return sendError(res, 'Server error searching users', 500);
     }
 };
 
@@ -235,10 +183,7 @@ const updateUser = async (req, res) => {
         // Check if user exists
         const users = await getUserByIdFromDB(id);
         if (users.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
+            return sendError(res, 'User not found', 404);
         }
 
         // Prepare update data
@@ -255,10 +200,7 @@ const updateUser = async (req, res) => {
                 // Check if username exists for other users
                 const existingUsername = await checkUsernameExistsExcluding(username, id);
                 if (existingUsername.length > 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Username already exists'
-                    });
+                    return sendError(res, 'Username already exists', 400);
                 }
                 updateData.username = username;
             }
@@ -266,20 +208,14 @@ const updateUser = async (req, res) => {
                 // Check if email exists for other users
                 const existingEmail = await checkEmailExistsExcluding(email, id);
                 if (existingEmail.length > 0) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'Email already exists'
-                    });
+                    return sendError(res, 'Email already exists', 400);
                 }
                 updateData.email = email;
             }
         }
 
         if (Object.keys(updateData).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'No fields to update'
-            });
+            return sendError(res, 'No fields to update', 400);
         }
 
         // Update user
@@ -294,19 +230,11 @@ const updateUser = async (req, res) => {
             delete updatedUser.password_hash;
         }
 
-        res.json({
-            success: true,
-            message: 'User updated successfully',
-            data: updatedUser
-        });
+        return sendSuccess(res, 'User updated successfully', updatedUser);
 
     } catch (error) {
         console.error('Update user error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error updating user',
-            error: error.message
-        });
+        return sendError(res, 'Server error updating user', 500);
     }
 };
 
@@ -319,10 +247,7 @@ const deleteUser = async (req, res) => {
         // Check if user exists
         const users = await getUserByIdFromDB(id);
         if (users.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
+            return sendError(res, 'User not found', 404);
         }
 
         const userToDelete = users[0];
@@ -331,10 +256,7 @@ const deleteUser = async (req, res) => {
         if (req.user.role === 'user') {
             // Regular users can only delete their own account
             if (currentUserId !== id) {
-                return res.status(403).json({
-                    success: false,
-                    message: 'You can only delete your own account'
-                });
+                return sendError(res, 'You can only delete your own account', 403);
             }
         }
         // Admin users can delete any account
@@ -346,22 +268,14 @@ const deleteUser = async (req, res) => {
         // Delete user
         await deleteUserFromDB(id);
 
-        res.json({
-            success: true,
-            message: 'User deleted successfully',
-            data: {
-                hadReservations: hasReservations.length > 0,
-                hadFoodOrders: hasFoodOrders.length > 0
-            }
+        return sendSuccess(res, 'User deleted successfully', {
+            hadReservations: hasReservations.length > 0,
+            hadFoodOrders: hasFoodOrders.length > 0
         });
 
     } catch (error) {
         console.error('Delete user error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error deleting user',
-            error: error.message
-        });
+        return sendError(res, 'Server error deleting user', 500);
     }
 };
 
@@ -370,19 +284,11 @@ const getUserStats = async (req, res) => {
     try {
         const stats = await getUserStatsFromDB();
 
-        res.json({
-            success: true,
-            message: 'User statistics retrieved',
-            data: stats
-        });
+        return sendSuccess(res, 'User statistics retrieved', stats);
 
     } catch (error) {
         console.error('Get user stats error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error retrieving user statistics',
-            error: error.message
-        });
+        return sendError(res, 'Server error retrieving user statistics', 500);
     }
 };
 
@@ -392,19 +298,13 @@ const resetPassword = async (req, res) => {
         const { email, newPassword } = req.body;
 
         if (!email || !newPassword) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email and new password are required'
-            });
+            return sendError(res, 'Email and new password are required', 400);
         }
 
         // Check if user exists
         const users = await getUserByEmail(email);
         if (users.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'User not found'
-            });
+            return sendError(res, 'User not found', 404);
         }
 
         // Hash new password
@@ -414,18 +314,11 @@ const resetPassword = async (req, res) => {
         // Update password
         await updateUserPasswordInDB(email, passwordHash);
 
-        res.json({
-            success: true,
-            message: 'Password reset successfully'
-        });
+        return sendSuccess(res, 'Password reset successfully');
 
     } catch (error) {
         console.error('Reset password error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Server error resetting password',
-            error: error.message
-        });
+        return sendError(res, 'Server error resetting password', 500);
     }
 };
 

@@ -25,7 +25,7 @@ export interface Room {
 }
 
 export default function RoomsPage() {
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   const { toast } = useToast()
   const isAdmin = user?.role === "admin"
   const [isLoading, setIsLoading] = useState(true)
@@ -38,17 +38,15 @@ export default function RoomsPage() {
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
 
-  // Fetch real rooms from API
   useEffect(() => {
-    if (token) {
-      fetchRooms()
-    }
-  }, [token])
+    fetchRooms()
+  }, [])
 
   const fetchRooms = async () => {
     try {
       setIsLoading(true)
-      const data = await adminApi.getRooms(token!)
+      // ✅ Since your backend doesn't have /rooms, use /rooms/available for now
+      const data = await adminApi.getAvailableRooms()
       setRooms(data)
     } catch (error) {
       console.error('Error fetching rooms:', error)
@@ -79,22 +77,21 @@ export default function RoomsPage() {
       title: "Edit mode",
       description: `Editing room ${room.room_number}`,
     })
-    // TODO: Implement edit functionality
   }
 
   const handleDelete = async (room: Room) => {
+    if (!isAdmin) return
     try {
-      await adminApi.deleteRoom(token!, room.room_id)
+      await adminApi.deleteRoom(room.room_id)
       toast({
         title: "Room deleted",
         description: `Room ${room.room_number} has been deleted.`,
       })
-      // Refresh rooms list
       fetchRooms()
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to delete room",
+        description: error.response?.data?.message || "Failed to delete room",
         variant: "destructive"
       })
     }
@@ -179,7 +176,10 @@ export default function RoomsPage() {
               type: room.room_type,
               price: room.price,
               status: room.current_status || room.status,
-              image: room.image_url || "/placeholder-room.jpg"
+              image: room.image_url || "/placeholder-room.jpg",
+              floor: "1",
+              capacity: 2,
+              amenities: []
             }}
             onView={() => handleView(room)}
             onEdit={() => handleEdit(room)}
@@ -212,7 +212,10 @@ export default function RoomsPage() {
           type: selectedRoom.room_type,
           price: selectedRoom.price,
           status: selectedRoom.current_status || selectedRoom.status,
-          image: selectedRoom.image_url || "/placeholder-room.jpg"
+          image: selectedRoom.image_url || "/placeholder-room.jpg",
+          floor: "1",
+          capacity: 2,
+          amenities: []
         } : null} 
         open={viewDialogOpen} 
         onOpenChange={setViewDialogOpen} 

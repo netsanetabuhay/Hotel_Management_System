@@ -153,7 +153,6 @@ function AddUserDialog({
   onOpenChange: (open: boolean) => void
   onUserAdded: () => void
 }) {
-  const { token } = useAuth()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -171,7 +170,6 @@ function AddUserDialog({
     
     try {
       setIsLoading(true)
-      // You'll need to add this method to adminApi
       await adminApi.createUser(formData)
       
       toast({
@@ -327,7 +325,6 @@ export default function UsersPage() {
   const fetchUsers = async () => {
     try {
       setIsLoading(true)
-      // You'll need to add this method to adminApi
       const data = await adminApi.getUsers()
       setUsers(data)
     } catch (error) {
@@ -372,7 +369,7 @@ export default function UsersPage() {
         title: "User deleted",
         description: `${user.username} has been removed.`,
       })
-      fetchUsers() // Refresh the list
+      fetchUsers()
     } catch (error) {
       toast({
         title: "Error",

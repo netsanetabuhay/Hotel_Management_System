@@ -28,16 +28,19 @@ export default function AdminDashboardPage() {
     totalRooms: 0,
     occupiedRooms: 0
   })
+  
 
   useEffect(() => {
     if (user && user.role !== 'admin') {
       router.push('/dashboard/user')
     }
     
+    
     if (user && user.role === 'admin') {
       fetchDashboardStats()
     }
   }, [user, router])
+  
 
   const fetchDashboardStats = async () => {
     try {

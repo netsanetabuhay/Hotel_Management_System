@@ -10,12 +10,18 @@ const api = axios.create({
 // Request interceptor - Add token to every request
 api.interceptors.request.use(
   (config) => {
-    if (!config.headers.Authorization) {
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('token');
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`;
-        }
+    // ✅ ADD CONSOLE LOG TO DEBUG
+    console.log('🔧 Request URL:', config.baseURL + config.url);
+    
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem('token');
+      console.log('🔧 Token from localStorage:', token ? '✅ Present' : '❌ Missing');
+      
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+        console.log('🔧 Authorization header set:', config.headers.Authorization);
+      } else {
+        console.log('🔧 No token found in localStorage');
       }
     }
     return config;
@@ -23,21 +29,5 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - Handle 401 errors
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-      }
-      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
-      }
-    }
-    return Promise.reject(error);
-  }
-);
-
+// ... rest of your code
 export default api;

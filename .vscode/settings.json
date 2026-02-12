@@ -1,0 +1,14 @@
+{
+  "editor.quickSuggestions": {
+    "other": true,
+    "comments": true,
+    "strings": true
+  },
+
+
+  "editor.suggestOnTriggerCharacters": true,
+  "editor.wordBasedSuggestions": "all",
+  "editor.parameterHints.enabled": true,
+  "editor.tabCompletion": "on"
+
+}
