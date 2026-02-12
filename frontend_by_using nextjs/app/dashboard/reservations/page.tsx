@@ -1,8 +1,9 @@
 "use client"
 
 import React from "react"
+import { useRouter } from 'next/navigation'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Plus,
   Search,
@@ -18,6 +19,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -42,22 +44,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { mockReservations, mockRooms, type Reservation } from "@/lib/mock-data"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
+import { adminApi } from "@/lib/api/admin-dashboard"
+
+// Define Reservation type based on your backend response
+export interface Reservation {
+  room_order_id: string
+  user_id: string
+  room_id: string
+  check_in: string
+  check_out: string
+  status: 'booked' | 'active' | 'completed' | 'cancelled'
+  payment_status: 'paid' | 'unpaid'
+  created_at: string
+  // Joined fields from getReservationByIdWithDetails
+  room_number?: string
+  room_type?: string
+  guest_name?: string
+  guest_email?: string
+  total_price?: number
+}
 
 const statusColors: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700",
-  confirmed: "bg-blue-100 text-blue-700",
-  "checked-in": "bg-emerald-100 text-emerald-700",
-  "checked-out": "bg-gray-100 text-gray-700",
+  booked: "bg-blue-100 text-blue-700",
+  active: "bg-emerald-100 text-emerald-700",
+  completed: "bg-gray-100 text-gray-700",
   cancelled: "bg-red-100 text-red-700",
 }
 
 const paymentColors: Record<string, string> = {
-  pending: "bg-amber-100 text-amber-700",
   paid: "bg-emerald-100 text-emerald-700",
-  refunded: "bg-gray-100 text-gray-700",
+  unpaid: "bg-amber-100 text-amber-700",
 }
 
 function ReservationDetailsDialog({
@@ -69,16 +87,36 @@ function ReservationDetailsDialog({
   reservation: Reservation | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onStatusChange: (id: string, status: string) => void
+  onStatusChange: (id: string, status: string) => Promise<void>
 }) {
+  const { token } = useAuth()
+  const { toast } = useToast()
+  const [isUpdating, setIsUpdating] = useState(false)
+
   if (!reservation) return null
+
+  const handleStatusUpdate = async (status: string) => {
+    try {
+      setIsUpdating(true)
+      await onStatusChange(reservation.room_order_id, status)
+      onOpenChange(false)
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update reservation status",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUpdating(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Reservation Details</DialogTitle>
-          <DialogDescription>Booking #{reservation.id}</DialogDescription>
+          <DialogDescription>Booking #{reservation.room_order_id}</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
@@ -86,15 +124,15 @@ function ReservationDetailsDialog({
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <User className="h-4 w-4" /> Guest
               </p>
-              <p className="font-medium text-foreground">{reservation.guestName}</p>
-              <p className="text-sm text-muted-foreground">{reservation.guestEmail}</p>
+              <p className="font-medium text-foreground">{reservation.guest_name || 'Guest'}</p>
+              <p className="text-sm text-muted-foreground">{reservation.guest_email || ''}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <BedDouble className="h-4 w-4" /> Room
               </p>
-              <p className="font-medium text-foreground">Room {reservation.roomNumber}</p>
-              <p className="text-sm text-muted-foreground capitalize">{reservation.roomType}</p>
+              <p className="font-medium text-foreground">Room {reservation.room_number || reservation.room_id}</p>
+              <p className="text-sm text-muted-foreground capitalize">{reservation.room_type || 'Standard'}</p>
             </div>
           </div>
 
@@ -103,13 +141,13 @@ function ReservationDetailsDialog({
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" /> Check-in
               </p>
-              <p className="font-medium text-foreground">{reservation.checkIn}</p>
+              <p className="font-medium text-foreground">{new Date(reservation.check_in).toLocaleDateString()}</p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground flex items-center gap-2">
                 <Calendar className="h-4 w-4" /> Check-out
               </p>
-              <p className="font-medium text-foreground">{reservation.checkOut}</p>
+              <p className="font-medium text-foreground">{new Date(reservation.check_out).toLocaleDateString()}</p>
             </div>
           </div>
 
@@ -117,51 +155,42 @@ function ReservationDetailsDialog({
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Status</p>
               <Badge className={statusColors[reservation.status]} variant="secondary">
-                {reservation.status.replace("-", " ")}
+                {reservation.status}
               </Badge>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground">Payment</p>
-              <Badge className={paymentColors[reservation.paymentStatus]} variant="secondary">
-                {reservation.paymentStatus}
+              <Badge className={paymentColors[reservation.payment_status]} variant="secondary">
+                {reservation.payment_status}
               </Badge>
             </div>
           </div>
 
-          {reservation.specialRequests && (
-            <div className="space-y-1">
-              <p className="text-sm text-muted-foreground">Special Requests</p>
-              <p className="text-sm text-foreground bg-accent p-3 rounded-lg">{reservation.specialRequests}</p>
-            </div>
-          )}
-
           <div className="pt-4 border-t flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">Total Amount</p>
-              <p className="text-2xl font-bold text-foreground">${reservation.totalAmount.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground">
+                ${reservation.total_price?.toLocaleString() || '0.00'}
+              </p>
             </div>
             <div className="flex gap-2">
-              {reservation.status === "pending" && (
+              {reservation.status === "booked" && (
                 <>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      onStatusChange(reservation.id, "confirmed")
-                      onOpenChange(false)
-                    }}
+                    onClick={() => handleStatusUpdate("active")}
+                    disabled={isUpdating}
                     className="bg-transparent"
                   >
                     <CheckCircle className="h-4 w-4 mr-1" />
-                    Confirm
+                    Check In
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      onStatusChange(reservation.id, "cancelled")
-                      onOpenChange(false)
-                    }}
+                    onClick={() => handleStatusUpdate("cancelled")}
+                    disabled={isUpdating}
                     className="bg-transparent text-destructive hover:text-destructive"
                   >
                     <XCircle className="h-4 w-4 mr-1" />
@@ -169,25 +198,11 @@ function ReservationDetailsDialog({
                   </Button>
                 </>
               )}
-              {reservation.status === "confirmed" && (
+              {reservation.status === "active" && (
                 <Button
                   size="sm"
-                  onClick={() => {
-                    onStatusChange(reservation.id, "checked-in")
-                    onOpenChange(false)
-                  }}
-                >
-                  <CheckCircle className="h-4 w-4 mr-1" />
-                  Check In
-                </Button>
-              )}
-              {reservation.status === "checked-in" && (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    onStatusChange(reservation.id, "checked-out")
-                    onOpenChange(false)
-                  }}
+                  onClick={() => handleStatusUpdate("completed")}
+                  disabled={isUpdating}
                 >
                   <CheckCircle className="h-4 w-4 mr-1" />
                   Check Out
@@ -201,27 +216,69 @@ function ReservationDetailsDialog({
   )
 }
 
-function NewReservationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function NewReservationDialog({ 
+  open, 
+  onOpenChange,
+  onReservationCreated 
+}: { 
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onReservationCreated: () => void
+}) {
+  const { token } = useAuth()
   const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
+  const [availableRooms, setAvailableRooms] = useState<any[]>([])
   const [formData, setFormData] = useState({
-    guestName: "",
-    guestEmail: "",
-    roomId: "",
-    checkIn: "",
-    checkOut: "",
-    specialRequests: "",
+    room_id: "",
+    check_in: "",
+    check_out: "",
   })
 
-  const availableRooms = mockRooms.filter((r) => r.status === "available")
+  // Fetch available rooms when dialog opens
+  useEffect(() => {
+    if (open && token) {
+      fetchAvailableRooms()
+    }
+  }, [open, token])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const fetchAvailableRooms = async () => {
+    try {
+      const rooms = await adminApi.getAvailableRooms(token!)
+      setAvailableRooms(rooms)
+    } catch (error) {
+      console.error('Error fetching available rooms:', error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast({
-      title: "Reservation created",
-      description: "The reservation has been created successfully.",
-    })
-    onOpenChange(false)
-    setFormData({ guestName: "", guestEmail: "", roomId: "", checkIn: "", checkOut: "", specialRequests: "" })
+    try {
+      setIsLoading(true)
+      // Create reservation through your API
+      const response = await adminApi.createReservation(token!, {
+        room_id: formData.room_id,
+        check_in: formData.check_in,
+        check_out: formData.check_out
+      })
+      
+      toast({
+        title: "Success",
+        description: "Reservation created successfully",
+      })
+      
+      setFormData({ room_id: "", check_in: "", check_out: "" })
+      onReservationCreated()
+      onOpenChange(false)
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to create reservation",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -233,38 +290,19 @@ function NewReservationDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="guestName">Guest Name</Label>
-            <Input
-              id="guestName"
-              placeholder="John Doe"
-              value={formData.guestName}
-              onChange={(e) => setFormData({ ...formData, guestName: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="guestEmail">Guest Email</Label>
-            <Input
-              id="guestEmail"
-              type="email"
-              placeholder="john@example.com"
-              value={formData.guestEmail}
-              onChange={(e) => setFormData({ ...formData, guestEmail: e.target.value })}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="room">Room</Label>
-            <Select value={formData.roomId} onValueChange={(value) => setFormData({ ...formData, roomId: value })}>
+            <Select 
+              value={formData.room_id} 
+              onValueChange={(value) => setFormData({ ...formData, room_id: value })}
+              required
+            >
               <SelectTrigger id="room">
                 <SelectValue placeholder="Select a room" />
               </SelectTrigger>
               <SelectContent>
                 {availableRooms.map((room) => (
-                  <SelectItem key={room.id} value={room.id}>
-                    Room {room.number} - {room.type} (${room.price}/night)
+                  <SelectItem key={room.room_id} value={room.room_id}>
+                    Room {room.room_number} - {room.room_type} (${room.price}/night)
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -277,9 +315,10 @@ function NewReservationDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Input
                 id="checkIn"
                 type="date"
-                value={formData.checkIn}
-                onChange={(e) => setFormData({ ...formData, checkIn: e.target.value })}
+                value={formData.check_in}
+                onChange={(e) => setFormData({ ...formData, check_in: e.target.value })}
                 required
+                min={new Date().toISOString().split('T')[0]}
               />
             </div>
             <div className="space-y-2">
@@ -287,28 +326,21 @@ function NewReservationDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Input
                 id="checkOut"
                 type="date"
-                value={formData.checkOut}
-                onChange={(e) => setFormData({ ...formData, checkOut: e.target.value })}
+                value={formData.check_out}
+                onChange={(e) => setFormData({ ...formData, check_out: e.target.value })}
                 required
+                min={formData.check_in || new Date().toISOString().split('T')[0]}
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="specialRequests">Special Requests (Optional)</Label>
-            <Textarea
-              id="specialRequests"
-              placeholder="Any special requirements..."
-              value={formData.specialRequests}
-              onChange={(e) => setFormData({ ...formData, specialRequests: e.target.value })}
-            />
           </div>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="bg-transparent">
               Cancel
             </Button>
-            <Button type="submit">Create Reservation</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Creating..." : "Create Reservation"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -317,40 +349,110 @@ function NewReservationDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 }
 
 export default function ReservationsPage() {
-  const { user } = useAuth()
+  const { user, token } = useAuth()
   const { toast } = useToast()
+  const router = useRouter()
   const isAdmin = user?.role === "admin" || user?.role === "receptionist"
-
+  
+  const [isLoading, setIsLoading] = useState(true)
+  const [reservations, setReservations] = useState<Reservation[]>([])
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [newDialogOpen, setNewDialogOpen] = useState(false)
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
 
-  // Filter reservations based on role
+  // Fetch real reservations from API
+  useEffect(() => {
+    if (token) {
+      fetchReservations()
+    }
+  }, [token])
+
+  const fetchReservations = async () => {
+    try {
+      setIsLoading(true)
+      const data = await adminApi.getReservations(token!)
+      setReservations(data)
+    } catch (error) {
+      console.error('Error fetching reservations:', error)
+      toast({
+        title: "Error",
+        description: "Failed to load reservations",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Filter reservations based on role and search
   const userReservations = isAdmin
-    ? mockReservations
-    : mockReservations.filter((r) => r.guestEmail === user?.email)
+    ? reservations
+    : reservations.filter((r) => r.user_id === user?.id)
 
   const filteredReservations = userReservations.filter((reservation) => {
-    const matchesSearch =
-      reservation.guestName.toLowerCase().includes(search.toLowerCase()) ||
-      reservation.roomNumber.includes(search) ||
-      reservation.id.toLowerCase().includes(search.toLowerCase())
+    const matchesSearch = 
+      reservation.room_number?.toLowerCase().includes(search.toLowerCase()) ||
+      reservation.room_order_id.toLowerCase().includes(search.toLowerCase()) ||
+      reservation.guest_name?.toLowerCase().includes(search.toLowerCase()) ||
+      false
+    
     const matchesStatus = statusFilter === "all" || reservation.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
-  const handleStatusChange = (id: string, status: string) => {
-    toast({
-      title: "Status updated",
-      description: `Reservation status changed to ${status}.`,
-    })
+  const handleStatusChange = async (id: string, status: string) => {
+    try {
+      await adminApi.updateReservation(token!, id, { status })
+      toast({
+        title: "Success",
+        description: `Reservation status updated to ${status}`,
+      })
+      fetchReservations() // Refresh the list
+    } catch (error) {
+      throw error
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      await adminApi.deleteReservation(token!, id)
+      toast({
+        title: "Success",
+        description: "Reservation deleted successfully",
+      })
+      fetchReservations() // Refresh the list
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete reservation",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleView = (reservation: Reservation) => {
     setSelectedReservation(reservation)
     setDetailsDialogOpen(true)
+  }
+
+  // Calculate stats
+  const stats = {
+    pending: userReservations.filter(r => r.status === 'booked').length,
+    confirmed: userReservations.filter(r => r.status === 'active').length,
+    checkedIn: userReservations.filter(r => r.status === 'active').length,
+    totalRevenue: userReservations
+      .filter(r => r.payment_status === 'paid')
+      .reduce((sum, r) => sum + (r.total_price || 0), 0)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -370,7 +472,7 @@ export default function ReservationsPage() {
         )}
       </div>
 
-      {/* Stats Cards */}
+      {/* Stats Cards - Real Data */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
@@ -379,10 +481,8 @@ export default function ReservationsPage() {
                 <Clock className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {userReservations.filter((r) => r.status === "pending").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Pending</p>
+                <p className="text-2xl font-bold text-foreground">{stats.pending}</p>
+                <p className="text-sm text-muted-foreground">Booked</p>
               </div>
             </div>
           </CardContent>
@@ -394,10 +494,8 @@ export default function ReservationsPage() {
                 <CheckCircle className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {userReservations.filter((r) => r.status === "confirmed").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Confirmed</p>
+                <p className="text-2xl font-bold text-foreground">{stats.confirmed}</p>
+                <p className="text-sm text-muted-foreground">Active</p>
               </div>
             </div>
           </CardContent>
@@ -409,9 +507,7 @@ export default function ReservationsPage() {
                 <CalendarCheck className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">
-                  {userReservations.filter((r) => r.status === "checked-in").length}
-                </p>
+                <p className="text-2xl font-bold text-foreground">{stats.checkedIn}</p>
                 <p className="text-sm text-muted-foreground">Checked In</p>
               </div>
             </div>
@@ -424,9 +520,7 @@ export default function ReservationsPage() {
                 <DollarSign className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">
-                  ${userReservations.reduce((sum, r) => sum + r.totalAmount, 0).toLocaleString()}
-                </p>
+                <p className="text-2xl font-bold text-foreground">${stats.totalRevenue.toLocaleString()}</p>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
               </div>
             </div>
@@ -434,7 +528,7 @@ export default function ReservationsPage() {
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters - Same as before */}
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -454,10 +548,9 @@ export default function ReservationsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="checked-in">Checked In</SelectItem>
-                <SelectItem value="checked-out">Checked Out</SelectItem>
+                <SelectItem value="booked">Booked</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
@@ -465,7 +558,7 @@ export default function ReservationsPage() {
         </CardContent>
       </Card>
 
-      {/* Reservations Table */}
+      {/* Reservations Table - Real Data */}
       <Card>
         <CardHeader>
           <CardTitle>All Reservations</CardTitle>
@@ -489,31 +582,31 @@ export default function ReservationsPage() {
               </TableHeader>
               <TableBody>
                 {filteredReservations.map((reservation) => (
-                  <TableRow key={reservation.id}>
-                    <TableCell className="font-medium">{reservation.id}</TableCell>
+                  <TableRow key={reservation.room_order_id}>
+                    <TableCell className="font-medium">{reservation.room_order_id}</TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium text-foreground">{reservation.guestName}</p>
-                        <p className="text-sm text-muted-foreground">{reservation.guestEmail}</p>
+                        <p className="font-medium text-foreground">{reservation.guest_name || 'Guest'}</p>
+                        <p className="text-sm text-muted-foreground">{reservation.guest_email || ''}</p>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <p className="font-medium text-foreground">Room {reservation.roomNumber}</p>
-                        <p className="text-sm text-muted-foreground capitalize">{reservation.roomType}</p>
+                        <p className="font-medium text-foreground">Room {reservation.room_number || reservation.room_id}</p>
+                        <p className="text-sm text-muted-foreground capitalize">{reservation.room_type || 'Standard'}</p>
                       </div>
                     </TableCell>
-                    <TableCell>{reservation.checkIn}</TableCell>
-                    <TableCell>{reservation.checkOut}</TableCell>
-                    <TableCell className="font-medium">${reservation.totalAmount.toLocaleString()}</TableCell>
+                    <TableCell>{new Date(reservation.check_in).toLocaleDateString()}</TableCell>
+                    <TableCell>{new Date(reservation.check_out).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-medium">${reservation.total_price?.toLocaleString() || '0.00'}</TableCell>
                     <TableCell>
                       <Badge className={statusColors[reservation.status]} variant="secondary">
-                        {reservation.status.replace("-", " ")}
+                        {reservation.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge className={paymentColors[reservation.paymentStatus]} variant="secondary">
-                        {reservation.paymentStatus}
+                      <Badge className={paymentColors[reservation.payment_status]} variant="secondary">
+                        {reservation.payment_status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -528,7 +621,12 @@ export default function ReservationsPage() {
                               <Edit2 className="h-4 w-4" />
                               <span className="sr-only">Edit</span>
                             </Button>
-                            <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleDelete(reservation.room_order_id)}
+                            >
                               <Trash2 className="h-4 w-4" />
                               <span className="sr-only">Delete</span>
                             </Button>
@@ -552,7 +650,12 @@ export default function ReservationsPage() {
         </CardContent>
       </Card>
 
-      <NewReservationDialog open={newDialogOpen} onOpenChange={setNewDialogOpen} />
+      <NewReservationDialog 
+        open={newDialogOpen} 
+        onOpenChange={setNewDialogOpen}
+        onReservationCreated={fetchReservations}
+      />
+      
       <ReservationDetailsDialog
         reservation={selectedReservation}
         open={detailsDialogOpen}

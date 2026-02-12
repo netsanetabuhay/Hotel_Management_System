@@ -4,15 +4,19 @@ import { useAuth } from '@/lib/auth-context'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Hotel, Users, Calendar, DollarSign, TrendingUp, AlertCircle, Package, ShoppingCart, Loader2 } from 'lucide-react'
+import { 
+  Hotel, Users, Calendar, DollarSign, Package, ShoppingCart, 
+  Loader2, BarChart3 
+} from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { adminApi } from '@/lib/api/admin-dashboard'
 import { toast } from 'sonner'
 
 export default function AdminDashboardPage() {
-  const { user, token } = useAuth()
+  const { user } = useAuth() 
   const router = useRouter()
+  
   const [isLoading, setIsLoading] = useState(true)
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -20,7 +24,9 @@ export default function AdminDashboardPage() {
     foodItems: 0,
     pendingOrders: 0,
     totalRevenue: 0,
-    todayReservations: 0
+    todayReservations: 0,
+    totalRooms: 0,
+    occupiedRooms: 0
   })
 
   useEffect(() => {
@@ -28,16 +34,24 @@ export default function AdminDashboardPage() {
       router.push('/dashboard/user')
     }
     
-    if (user && token && user.role === 'admin') {
+    if (user && user.role === 'admin') {
       fetchDashboardStats()
     }
-  }, [user, token, router])
+  }, [user, router])
 
   const fetchDashboardStats = async () => {
     try {
       setIsLoading(true)
-      const dashboardStats = await adminApi.getDashboardStats(token!)
-      setStats(dashboardStats)
+      
+      const dashboardStats = await adminApi.getDashboardStats()
+      const roomStatus = await adminApi.getRoomStatus()
+      
+      setStats({
+        ...dashboardStats,
+        totalRooms: roomStatus.total || 0,
+        occupiedRooms: roomStatus.occupied || 0
+      })
+      
     } catch (error) {
       console.error('Error fetching dashboard stats:', error)
       toast.error('Failed to load dashboard data')
@@ -63,55 +77,97 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
         <h1 className="text-3xl font-bold text-foreground">Admin Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back, {user?.username}. Here's what's happening.</p>
+        <p className="text-muted-foreground">
+          Welcome back, {user?.first_name || user?.username}. Here's what's happening.
+        </p>
       </div>
 
-      {/* Stats with Real Data */}
+      {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {/* Available Rooms */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Available Rooms</CardTitle>
-            <Hotel className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 bg-emerald-100 rounded-full">
+              <Hotel className="h-4 w-4 text-emerald-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{stats.availableRooms}</div>
-            <p className="text-xs text-muted-foreground">Ready for booking</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.totalRooms > 0 
+                ? `${Math.round((stats.availableRooms / stats.totalRooms) * 100)}% of total` 
+                : 'Ready for booking'}
+            </p>
+            <div className="mt-2 text-xs text-emerald-600">
+              {stats.occupiedRooms} occupied • {stats.totalRooms} total
+            </div>
           </CardContent>
         </Card>
 
+        {/* Food Items */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Food Items</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 bg-orange-100 rounded-full">
+              <Package className="h-4 w-4 text-orange-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{stats.foodItems}</div>
-            <p className="text-xs text-muted-foreground">In menu</p>
+            <p className="text-xs text-muted-foreground mt-1">In menu</p>
+            <Button 
+              variant="link" 
+              className="mt-2 h-auto p-0 text-xs text-orange-600"
+              onClick={() => router.push('/dashboard/food-menu')}
+            >
+              Manage Menu →
+            </Button>
           </CardContent>
         </Card>
 
+        {/* Today's Reservations */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Today's Reservations</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 bg-blue-100 rounded-full">
+              <Calendar className="h-4 w-4 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{stats.todayReservations}</div>
-            <p className="text-xs text-muted-foreground">Check-ins today</p>
+            <p className="text-xs text-muted-foreground mt-1">Check-ins today</p>
+            <Button 
+              variant="link" 
+              className="mt-2 h-auto p-0 text-xs text-blue-600"
+              onClick={() => router.push('/dashboard/reservations')}
+            >
+              View All →
+            </Button>
           </CardContent>
         </Card>
 
+        {/* Pending Orders */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Pending Orders</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+            <div className="p-2 bg-purple-100 rounded-full">
+              <ShoppingCart className="h-4 w-4 text-purple-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-foreground">{stats.pendingOrders}</div>
-            <p className="text-xs text-muted-foreground">Awaiting preparation</p>
+            <p className="text-xs text-muted-foreground mt-1">Awaiting preparation</p>
+            <Button 
+              variant="link" 
+              className="mt-2 h-auto p-0 text-xs text-purple-600"
+              onClick={() => router.push('/dashboard/food-orders')}
+            >
+              Manage Orders →
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -187,7 +243,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      {/* Admin Reports */}
+      {/* Reports & Analytics */}
       <Card>
         <CardHeader>
           <CardTitle>Reports & Analytics</CardTitle>
@@ -221,7 +277,7 @@ export default function AdminDashboardPage() {
             </Button>
           </div>
         </CardContent>
-      </Card>
+      </Card> 
     </div>
   )
 }

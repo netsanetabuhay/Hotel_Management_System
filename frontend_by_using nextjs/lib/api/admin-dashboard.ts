@@ -1,345 +1,263 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-
-// Types based on your backend
-export interface FoodItem {
-  food_id: string;
-  name: string;
-  category: string;
-  price: number;
-  description: string | null;
-  image_url: string | null;
-  created_at?: string;
-}
-
-export interface Room {
-  room_id: string;
-  room_number: string;
-  room_type: string;
-  price: number;
-  description: string | null;
-  image_url: string | null;
-  status: string;
-  created_at?: string;
-}
+import api from '../axios'
 
 export interface DashboardStats {
-  totalUsers: number;
-  availableRooms: number;
-  foodItems: number;
-  pendingOrders: number;
-  totalRevenue: number;
-  todayReservations: number;
+  totalUsers: number
+  availableRooms: number
+  foodItems: number
+  pendingOrders: number
+  totalRevenue: number
+  todayReservations: number
+  occupancyRate: number
+  recentActivities: Activity[]
 }
 
-export interface UploadResponse {
-  success: boolean;
-  data: {
-    filename: string;
-    originalname: string;
-    image_url: string;
-    size: number;
-    mimetype: string;
-  };
+export interface Activity {
+  id: string
+  type: 'reservation' | 'order' | 'user' | 'payment'
+  description: string
+  timestamp: string
+  status: string
 }
-  // Dashboard Stats
+
+export interface RoomStatus {
+  total: number
+  available: number
+  occupied: number
+  maintenance: number
+  cleaning: number
+}
 
 export const adminApi = {
-  // Dashboard Stats
-  getDashboardStats: async (token: string): Promise<DashboardStats> => {
+  // ✅ Get all users - NO TOKEN PARAMETER
+  getUsers: async () => {
+    const response = await api.get('/users');
+    return response.data?.data || [];
+  },
+
+  // ✅ Create user - NO TOKEN PARAMETER
+  createUser: async (userData: any) => {
+    const response = await api.post('/users/register', userData);
+    return response.data?.data || null;
+  },
+
+  // ✅ Delete user - NO TOKEN PARAMETER
+  deleteUser: async (userId: string) => {
+    const response = await api.delete(`/users/${userId}`);
+    return response.data;
+  },
+
+  // ✅ Update user - NO TOKEN PARAMETER
+  updateUser: async (userId: string, userData: any) => {
+    const response = await api.patch(`/users/${userId}`, userData);
+    return response.data?.data || null;
+  },
+
+  // ✅ Get dashboard stats - NO TOKEN PARAMETER, NO MANUAL HEADERS
+  getDashboardStats: async (): Promise<DashboardStats> => {
     try {
-      // Fetch all necessary data from backend
-      const [availableRoomsRes, allRoomsRes, foodRes, reservationsRes, ordersRes] = await Promise.all([
-        // Available rooms for users (current date)
-        fetch(`${API_URL}/rooms/available`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+      // Fetch all data in parallel - NO headers, NO token!
+      const [
+        roomsRes,
+        reservationsRes,
+        roomStatsRes,
+        reservationStatsRes
+      ] = await Promise.allSettled([
+        api.get('/rooms'), 
+        api.get('/room-orders', {
+          params: { 
+            check_in_from: new Date().toISOString().split('T')[0],
+            check_in_to: new Date().toISOString().split('T')[0]
+          }
         }),
-        // All rooms for admin
-        fetch(`${API_URL}/rooms`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        // Food items
-        fetch(`${API_URL}/food-items`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        // Reservations
-        fetch(`${API_URL}/room-orders`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }),
-        // Food orders
-        fetch(`${API_URL}/food-orders`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-      ]);
+        api.get('/rooms/stats/overview'),
+        api.get('/room-orders/stats/overview')
+      ])
 
-      const availableRoomsData = await availableRoomsRes.json();
-      const allRoomsData = await allRoomsRes.json();
-      const foodData = await foodRes.json();
-      const reservationsData = await reservationsRes.json();
-      const ordersData = await ordersRes.json();
-
-      const today = new Date().toISOString().split('T')[0];
+      // Parse ALL rooms response
+      let availableRooms = 0
+      let totalRooms = 0
+      let occupiedRooms = 0
       
-      // Calculate today's reservations
-      let todayReservations = 0;
-      if (reservationsData.success && Array.isArray(reservationsData.data)) {
-        todayReservations = reservationsData.data.filter((res: any) => {
-          const checkInDate = new Date(res.check_in).toISOString().split('T')[0];
-          return checkInDate === today;
-        }).length;
+      if (roomsRes.status === 'fulfilled' && roomsRes.value.data?.success) {
+        const rooms = roomsRes.value.data.data || []
+        totalRooms = rooms.length
+        
+        availableRooms = rooms.filter((room: any) => 
+          room.status === 'available' && room.current_status === 'available'
+        ).length
+        
+        occupiedRooms = rooms.filter((room: any) => 
+          room.status === 'booked' || 
+          room.current_status === 'booked' ||
+          room.status === 'occupied' || 
+          room.current_status === 'occupied'
+        ).length
+        
+        console.log('✅ /api/rooms - Total rooms:', totalRooms)
+        console.log('✅ /api/rooms - Available rooms:', availableRooms)
+        console.log('✅ /api/rooms - Occupied rooms:', occupiedRooms)
       }
 
-      // Calculate available rooms
-      let availableRooms = 0;
-      if (availableRoomsData.success && Array.isArray(availableRoomsData.data)) {
-        availableRooms = availableRoomsData.data.length;
-      } else if (allRoomsData.success && Array.isArray(allRoomsData.data)) {
-        // Fallback: count rooms with status 'available'
-        availableRooms = allRoomsData.data.filter((room: any) => 
-          room.status === 'available' || room.current_status === 'available'
-        ).length;
+      // Parse today's reservations
+      let todayReservations = 0
+      if (reservationsRes.status === 'fulfilled' && reservationsRes.value.data?.success) {
+        const reservations = reservationsRes.value.data.data || []
+        todayReservations = reservations.length
       }
+
+      // Parse room stats
+      let roomStats = {
+        total: 0,
+        available: 0,
+        occupied: 0,
+        maintenance: 0,
+        cleaning: 0
+      }
+      
+      if (roomStatsRes.status === 'fulfilled' && roomStatsRes.value.data?.success) {
+        const statsData = roomStatsRes.value.data.data
+        if (statsData?.roomStats) {
+          roomStats = statsData.roomStats
+        }
+      }
+
+      const occupancyRate = totalRooms > 0 
+        ? Math.round((occupiedRooms / totalRooms) * 100) 
+        : 0
 
       return {
-        totalUsers: 0, // You'll need to create a users count endpoint
-        availableRooms,
-        foodItems: foodData.success && Array.isArray(foodData.data) ? foodData.data.length : 0,
-        pendingOrders: ordersData.success && Array.isArray(ordersData.data) ? 
-          ordersData.data.filter((order: any) => 
-            order.order_status === 'pending'
-          ).length : 0,
-        totalRevenue: 0, // You'll need a revenue calculation endpoint
-        todayReservations
-      };
+        totalUsers: 0,
+        availableRooms: availableRooms,
+        foodItems: 0,
+        pendingOrders: 0,
+        totalRevenue: 0,
+        todayReservations: todayReservations,
+        occupancyRate: occupancyRate,
+        recentActivities: []
+      }
     } catch (error) {
-      console.error('Error fetching dashboard stats:', error);
-      throw error;
+      console.error('Error fetching dashboard stats:', error)
+      throw error
     }
   },
 
-  // Food Items
-  getFoodItems: async (token: string): Promise<FoodItem[]> => {
+  // ✅ Get room status - NO TOKEN PARAMETER, NO MANUAL HEADERS
+  getRoomStatus: async (): Promise<RoomStatus> => {
     try {
-      const response = await fetch(`${API_URL}/food-items`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
+      const response = await api.get('/rooms')
       
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch food items');
+      if (response.data?.success) {
+        const rooms = response.data.data || []
+        
+        return {
+          total: rooms.length,
+          available: rooms.filter((r: any) => 
+            r.status === 'available' && r.current_status === 'available'
+          ).length,
+          occupied: rooms.filter((r: any) => 
+            r.status === 'booked' || 
+            r.current_status === 'booked' ||
+            r.status === 'occupied' || 
+            r.current_status === 'occupied'
+          ).length,
+          maintenance: rooms.filter((r: any) => 
+            r.status === 'maintenance' || r.current_status === 'maintenance'
+          ).length,
+          cleaning: rooms.filter((r: any) => 
+            r.status === 'cleaning' || r.current_status === 'cleaning'
+          ).length
+        }
       }
       
-      return data.data;
+      return {
+        total: 0,
+        available: 0,
+        occupied: 0,
+        maintenance: 0,
+        cleaning: 0
+      }
     } catch (error) {
-      console.error('Error fetching food items:', error);
-      throw error;
+      console.error('Error fetching room status:', error)
+      throw error
     }
   },
 
-  createFoodItem: async (foodItem: Omit<FoodItem, 'food_id' | 'created_at'>, token: string): Promise<FoodItem> => {
-    try {
-      const response = await fetch(`${API_URL}/food-items`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(foodItem)
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create food item');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error creating food item:', error);
-      throw error;
-    }
+  // ✅ Get all rooms - NO TOKEN PARAMETER
+  getRooms: async () => {
+    const response = await api.get('/rooms')
+    return response.data?.data || []
   },
 
-  updateFoodItem: async (id: string, updates: Partial<FoodItem>, token: string): Promise<FoodItem> => {
-    try {
-      const response = await fetch(`${API_URL}/food-items/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updates)
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to update food item');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error updating food item:', error);
-      throw error;
-    }
+  // ✅ Create room - NO TOKEN PARAMETER
+  createRoom: async (roomData: any) => {
+    const response = await api.post('/rooms', roomData)
+    return response.data?.data || null
   },
 
-  deleteFoodItem: async (id: string, token: string): Promise<void> => {
-    try {
-      const response = await fetch(`${API_URL}/food-items/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete food item');
-      }
-    } catch (error) {
-      console.error('Error deleting food item:', error);
-      throw error;
-    }
+  // ✅ Update room - NO TOKEN PARAMETER
+  updateRoom: async (roomId: string, roomData: any) => {
+    const response = await api.patch(`/rooms/${roomId}`, roomData)
+    return response.data?.data || null
   },
 
-  getFoodCategories: async (token: string): Promise<string[]> => {
-    try {
-      const response = await fetch(`${API_URL}/food-items/categories`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch categories');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching categories:', error);
-      throw error;
-    }
+  // ✅ Delete room - NO TOKEN PARAMETER
+  deleteRoom: async (roomId: string) => {
+    const response = await api.delete(`/rooms/${roomId}`)
+    return response.data
   },
 
-  // Rooms
-  getRooms: async (token: string): Promise<Room[]> => {
-    try {
-      const response = await fetch(`${API_URL}/rooms`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to fetch rooms');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching rooms:', error);
-      throw error;
-    }
+  // ✅ Search rooms - NO TOKEN PARAMETER
+  searchRooms: async (param: string) => {
+    const response = await api.get(`/rooms/search/${param}`)
+    return response.data?.data || []
   },
 
-  createRoom: async (room: Omit<Room, 'room_id' | 'created_at'>, token: string): Promise<Room> => {
-    try {
-      const response = await fetch(`${API_URL}/rooms`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(room)
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create room');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error creating room:', error);
-      throw error;
-    }
+  // ✅ Get all reservations - NO TOKEN PARAMETER
+  getReservations: async (filters?: any) => {
+    const response = await api.get('/room-orders', { params: filters })
+    return response.data?.data || []
   },
 
-  updateRoom: async (id: string, updates: Partial<Room>, token: string): Promise<Room> => {
-    try {
-      const response = await fetch(`${API_URL}/rooms/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updates)
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to update room');
-      }
-      
-      return data.data;
-    } catch (error) {
-      console.error('Error updating room:', error);
-      throw error;
-    }
+  // ✅ Get reservation statistics - NO TOKEN PARAMETER
+  getReservationStats: async () => {
+    const response = await api.get('/room-orders/stats/overview')
+    return response.data?.data || null
   },
 
-  deleteRoom: async (id: string, token: string): Promise<void> => {
-    try {
-      const response = await fetch(`${API_URL}/rooms/${id}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete room');
-      }
-    } catch (error) {
-      console.error('Error deleting room:', error);
-      throw error;
-    }
+  // ✅ Update reservation - NO TOKEN PARAMETER
+  updateReservation: async (reservationId: string, data: any) => {
+    const response = await api.patch(`/room-orders/${reservationId}`, data)
+    return response.data?.data || null
   },
 
-  // Image Upload
-  uploadImage: async (file: File, uploadType: 'food' | 'rooms', token: string): Promise<UploadResponse> => {
-    try {
-      const formData = new FormData();
-      formData.append('image', file);
-      formData.append('uploadType', uploadType);
-
-      const response = await fetch(`${API_URL}/uploads/single`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to upload image');
-      }
-      
-      return data;
-    } catch (error) {
-      console.error('Error uploading image:', error);
-      throw error;
-    }
+  // ✅ Delete reservation - NO TOKEN PARAMETER
+  deleteReservation: async (reservationId: string) => {
+    const response = await api.delete(`/room-orders/${reservationId}`)
+    return response.data
   },
 
-  deleteImage: async (filename: string, type: 'food' | 'rooms' = 'food', token: string): Promise<void> => {
-    try {
-      const response = await fetch(`${API_URL}/uploads/${filename}?type=${type}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      const data = await response.json();
-      
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to delete image');
-      }
-    } catch (error) {
-      console.error('Error deleting image:', error);
-      throw error;
-    }
+  // ✅ Create reservation - NO TOKEN PARAMETER
+  createReservation: async (reservationData: any) => {
+    const response = await api.post('/room-orders', reservationData)
+    return response.data?.data || null
+  },
+
+  // ✅ Get available rooms - NO TOKEN PARAMETER
+  getAvailableRooms: async () => {
+    const response = await api.get('/rooms/available')
+    return response.data?.data || []
+  },
+
+  // ⚠️ NEED BACKEND IMPLEMENTATION
+  getRevenueData: async (period: 'week' | 'month' | 'year' = 'week') => {
+    return []
+  },
+
+  getFoodItems: async () => {
+    return []
+  },
+
+  getPendingOrders: async () => {
+    return []
   }
-};
+}

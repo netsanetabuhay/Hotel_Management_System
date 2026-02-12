@@ -36,10 +36,8 @@ export default function UserDashboardPage() {
 
     setIsLoading(true)
     try {
-      // Fetch user's data
       const data = await dashboardApi.getDashboardData(user.user_id, token)
       
-      // Fetch available rooms for count
       const rooms = await adminApi.getRooms(token)
       const availableRooms = rooms.filter((room: any) => 
         room.status === 'available' || room.current_status === 'available'

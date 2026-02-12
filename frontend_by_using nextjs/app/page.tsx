@@ -1,27 +1,29 @@
-"use client"
+'use client'
 
-import { useAuth } from "@/lib/auth-context"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
-import { Loader2 } from "lucide-react"
+import { useAuth } from '@/lib/auth-context'
+import { useEffect } from 'react'
+import { Loader2 } from 'lucide-react'
 
-export default function HomePage() {
+export default function DashboardRedirectPage() {
   const { user, isLoading } = useAuth()
-  const router = useRouter()
-
+  
   useEffect(() => {
-    if (!isLoading) {
-      if (user) {
-        router.push("/dashboard")
+    if (!isLoading && user) {
+      if (user.role === 'admin') {
+        window.location.href = '/dashboard/admin'
       } else {
-        router.push("/login")
+        window.location.href = '/dashboard/user'
       }
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading])
 
-  return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin" />
-    </div>
-  )
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  return null
 }

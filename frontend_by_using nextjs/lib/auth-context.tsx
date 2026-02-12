@@ -1,16 +1,14 @@
 'use client'
-
+import api from './axios'  
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
 
 interface User {
-  user_id: string  // Changed from 'id' to match backend's 'user_id'
-  username: string
+  user_id: string  
   email: string
-  first_name?: string | null  // Changed from firstName and matches backend
-  last_name?: string | null   // Changed from lastName and matches backend
+  first_name?: string | null 
+  last_name?: string | null   
   phone?: string | null
-  role: 'admin' | 'user'  // Removed 'staff' as your backend only has 'admin' or 'user'
+  role: 'admin' | 'user'  
 }
 
 interface AuthContextType {
@@ -33,13 +31,10 @@ interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const router = useRouter()
 
   useEffect(() => {
     const storedToken = localStorage.getItem('token')
@@ -49,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         setToken(storedToken)
         setUser(JSON.parse(storedUser))
+        api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`
       } catch (error) {
         localStorage.removeItem('token')
         localStorage.removeItem('user')
@@ -59,25 +55,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     try {
-      const response = await fetch(`${API_URL}/users/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Login failed')
+      console.log('1️⃣ Login attempt:', email);
+      
+      const response = await api.post('/users/login', { email, password });
+      const responseData = response.data;
+      
+      console.log('2️⃣ Login response:', responseData);
+      
+      if (!responseData.success) {
+        throw new Error(responseData.message || 'Login failed')
       }
       
-      localStorage.setItem('token', data.data.token)
-      localStorage.setItem('user', JSON.stringify(data.data.user))
+      const { user, token } = responseData.data;
       
-      setToken(data.data.token)
-      setUser(data.data.user)
-      router.push('/dashboard')
-    } catch (error) {
+      console.log('3️⃣ Token received:', token ? '✅ Yes' : '❌ No');
+      console.log('4️⃣ User role:', user.role);
+      
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+      
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      console.log('5️⃣ Axios header set:', api.defaults.headers.common['Authorization'] ? '✅' : '❌');
+      
+      setToken(token)
+      setUser(user)
+      
+      console.log('6️⃣ Redirecting to:', user.role === 'admin' ? '/dashboard/admin' : '/dashboard/user');
+      
+      if (user.role === 'admin') {
+        window.location.replace('/dashboard/admin?t=' + Date.now())
+      } else {
+        window.location.replace('/dashboard/user?t=' + Date.now())
+      }
+      
+    } catch (error: any) {
       console.error('Login error:', error)
       throw error
     }
@@ -85,21 +96,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (userData: RegisterData) => {
     try {
-      const response = await fetch(`${API_URL}/users/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userData),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Registration failed')
+      const response = await api.post('/users/register', userData)
+      const responseData = response.data
+      
+      if (!responseData.success) {
+        throw new Error(responseData.message || 'Registration failed')
       }
       
-      router.push('/login')
-      return data
-    } catch (error) {
+      window.location.href = '/login'
+    } catch (error: any) {
       console.error('Registration error:', error)
       throw error
     }
@@ -108,9 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    
+    delete api.defaults.headers.common['Authorization']
+    
     setToken(null)
     setUser(null)
-    router.push('/login')
+    
+    window.location.replace('/login?t=' + Date.now())
   }
 
   return (

@@ -1,8 +1,7 @@
 "use client"
 
 import React from "react"
-
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Plus,
   Search,
@@ -16,6 +15,7 @@ import {
   Mail,
   Phone,
   Calendar,
+  Loader2,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -40,22 +40,31 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { mockUsers, type User } from "@/lib/mock-data"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { adminApi } from "@/lib/api/admin-dashboard"
+
+// Define User type based on your backend response
+interface User {
+  user_id: string
+  username: string
+  email: string
+  first_name: string | null
+  last_name: string | null
+  phone: string | null
+  role: 'admin' | 'user'
+  created_at?: string
+}
 
 const roleColors: Record<string, string> = {
   admin: "bg-purple-100 text-purple-700",
-  receptionist: "bg-blue-100 text-blue-700",
-  guest: "bg-emerald-100 text-emerald-700",
+  user: "bg-emerald-100 text-emerald-700",
 }
 
 const roleIcons: Record<string, React.ElementType> = {
   admin: Shield,
-  receptionist: UserCircle,
-  guest: Users,
+  user: Users,
 }
 
 function UserDetailsDialog({
@@ -69,7 +78,8 @@ function UserDetailsDialog({
 }) {
   if (!user) return null
 
-  const RoleIcon = roleIcons[user.role]
+  const RoleIcon = roleIcons[user.role] || Users
+  const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -82,14 +92,16 @@ function UserDetailsDialog({
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
               <AvatarFallback className="bg-primary text-primary-foreground text-xl">
-                {user.name
+                {fullName
                   .split(" ")
                   .map((n) => n[0])
-                  .join("")}
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <h3 className="text-lg font-semibold text-foreground">{user.name}</h3>
+              <h3 className="text-lg font-semibold text-foreground">{fullName}</h3>
               <Badge className={roleColors[user.role]} variant="secondary">
                 <RoleIcon className="h-3 w-3 mr-1" />
                 {user.role}
@@ -120,7 +132,9 @@ function UserDetailsDialog({
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">Member Since</p>
-                <p className="font-medium text-foreground">{user.createdAt}</p>
+                <p className="font-medium text-foreground">
+                  {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                </p>
               </div>
             </div>
           </div>
@@ -130,24 +144,56 @@ function UserDetailsDialog({
   )
 }
 
-function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function AddUserDialog({ 
+  open, 
+  onOpenChange,
+  onUserAdded 
+}: { 
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onUserAdded: () => void
+}) {
+  const { token } = useAuth()
   const { toast } = useToast()
+  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
-    name: "",
+    username: "",
     email: "",
-    phone: "",
-    role: "guest",
     password: "",
+    first_name: "",
+    last_name: "",
+    phone: "",
+    role: "user",
   })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast({
-      title: "User created",
-      description: `${formData.name} has been added successfully.`,
-    })
-    onOpenChange(false)
-    setFormData({ name: "", email: "", phone: "", role: "guest", password: "" })
+    
+    try {
+      setIsLoading(true)
+      // You'll need to add this method to adminApi
+      await adminApi.createUser(formData)
+      
+      toast({
+        title: "Success",
+        description: "User created successfully",
+      })
+      
+      onUserAdded()
+      onOpenChange(false)
+      setFormData({
+        username: "", email: "", password: "", 
+        first_name: "", last_name: "", phone: "", role: "user"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to create user",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -159,14 +205,35 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
+            <Label htmlFor="username">Username</Label>
             <Input
-              id="name"
-              placeholder="John Doe"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              id="username"
+              placeholder="johndoe"
+              value={formData.username}
+              onChange={(e) => setFormData({ ...formData, username: e.target.value })}
               required
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="first_name">First Name</Label>
+              <Input
+                id="first_name"
+                placeholder="John"
+                value={formData.first_name}
+                onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="last_name">Last Name</Label>
+              <Input
+                id="last_name"
+                placeholder="Doe"
+                value={formData.last_name}
+                onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
@@ -199,8 +266,7 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="guest">Guest</SelectItem>
-                <SelectItem value="receptionist">Receptionist</SelectItem>
+                <SelectItem value="user">User</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
               </SelectContent>
             </Select>
@@ -219,10 +285,12 @@ function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="bg-transparent">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
               Cancel
             </Button>
-            <Button type="submit">Add User</Button>
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Creating..." : "Add User"}
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -235,24 +303,51 @@ export default function UsersPage() {
   const { toast } = useToast()
   const router = useRouter()
   const isAdmin = user?.role === "admin"
-
+  
+  const [isLoading, setIsLoading] = useState(true)
+  const [users, setUsers] = useState<User[]>([])
   const [search, setSearch] = useState("")
   const [roleFilter, setRoleFilter] = useState<string>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
 
+  // Fetch real users from API
+  useEffect(() => {
+    fetchUsers()
+  }, [])
+
   // Redirect non-admin users
   useEffect(() => {
-    if (user && user.role !== "admin" && user.role !== "receptionist") {
+    if (user && user.role !== "admin") {
       router.push("/dashboard")
     }
   }, [user, router])
 
-  const filteredUsers = mockUsers.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase())
+  const fetchUsers = async () => {
+    try {
+      setIsLoading(true)
+      // You'll need to add this method to adminApi
+      const data = await adminApi.getUsers()
+      setUsers(data)
+    } catch (error) {
+      console.error("Error fetching users:", error)
+      toast({
+        title: "Error",
+        description: "Failed to load users",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const filteredUsers = users.filter((u) => {
+    const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username
+    const matchesSearch = 
+      fullName.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      u.username.toLowerCase().includes(search.toLowerCase())
     const matchesRole = roleFilter === "all" || u.role === roleFilter
     return matchesSearch && matchesRole
   })
@@ -265,22 +360,39 @@ export default function UsersPage() {
   const handleEdit = (user: User) => {
     toast({
       title: "Edit mode",
-      description: `Editing ${user.name}`,
+      description: `Editing ${user.username}`,
     })
+    // TODO: Implement edit functionality
   }
 
-  const handleDelete = (user: User) => {
-    toast({
-      title: "User deleted",
-      description: `${user.name} has been removed.`,
-      variant: "destructive",
-    })
+  const handleDelete = async (user: User) => {
+    try {
+      await adminApi.deleteUser(user.user_id)
+      toast({
+        title: "User deleted",
+        description: `${user.username} has been removed.`,
+      })
+      fetchUsers() // Refresh the list
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete user",
+        variant: "destructive"
+      })
+    }
   }
 
-  // Stats
-  const adminCount = mockUsers.filter((u) => u.role === "admin").length
-  const receptionistCount = mockUsers.filter((u) => u.role === "receptionist").length
-  const guestCount = mockUsers.filter((u) => u.role === "guest").length
+  // Calculate stats
+  const adminCount = users.filter((u) => u.role === "admin").length
+  const userCount = users.filter((u) => u.role === "user").length
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -297,8 +409,8 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
+      {/* Stats - Real data from database */}
+      <div className="grid gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
@@ -306,7 +418,7 @@ export default function UsersPage() {
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{mockUsers.length}</p>
+                <p className="text-2xl font-bold text-foreground">{users.length}</p>
                 <p className="text-sm text-muted-foreground">Total Users</p>
               </div>
             </div>
@@ -328,25 +440,12 @@ export default function UsersPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-blue-100 text-blue-600">
-                <UserCircle className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{receptionistCount}</p>
-                <p className="text-sm text-muted-foreground">Receptionists</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
               <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-emerald-100 text-emerald-600">
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-foreground">{guestCount}</p>
-                <p className="text-sm text-muted-foreground">Guests</p>
+                <p className="text-2xl font-bold text-foreground">{userCount}</p>
+                <p className="text-sm text-muted-foreground">Users</p>
               </div>
             </div>
           </CardContent>
@@ -360,7 +459,7 @@ export default function UsersPage() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by name or email..."
+                placeholder="Search by name, username or email..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-10"
@@ -374,15 +473,14 @@ export default function UsersPage() {
               <SelectContent>
                 <SelectItem value="all">All Roles</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="receptionist">Receptionist</SelectItem>
-                <SelectItem value="guest">Guest</SelectItem>
+                <SelectItem value="user">User</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Users Table */}
+      {/* Users Table - Real data from database */}
       <Card>
         <CardHeader>
           <CardTitle>All Users</CardTitle>
@@ -403,20 +501,26 @@ export default function UsersPage() {
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((u) => {
-                  const RoleIcon = roleIcons[u.role]
+                  const RoleIcon = roleIcons[u.role] || Users
+                  const fullName = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username
                   return (
-                    <TableRow key={u.id}>
+                    <TableRow key={u.user_id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <Avatar className="h-9 w-9">
                             <AvatarFallback className="bg-primary/10 text-primary">
-                              {u.name
+                              {fullName
                                 .split(" ")
                                 .map((n) => n[0])
-                                .join("")}
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
-                          <span className="font-medium text-foreground">{u.name}</span>
+                          <div>
+                            <span className="font-medium text-foreground block">{fullName}</span>
+                            <span className="text-xs text-muted-foreground">@{u.username}</span>
+                          </div>
                         </div>
                       </TableCell>
                       <TableCell className="text-muted-foreground">{u.email}</TableCell>
@@ -427,7 +531,9 @@ export default function UsersPage() {
                           {u.role}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{u.createdAt}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {u.created_at ? new Date(u.created_at).toLocaleDateString() : 'N/A'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon" onClick={() => handleView(u)}>
@@ -445,7 +551,7 @@ export default function UsersPage() {
                                 size="icon"
                                 className="text-destructive hover:text-destructive"
                                 onClick={() => handleDelete(u)}
-                                disabled={u.id === user?.id}
+                                disabled={u.user_id === user?.user_id}
                               >
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete</span>
@@ -471,8 +577,17 @@ export default function UsersPage() {
         </CardContent>
       </Card>
 
-      <AddUserDialog open={addDialogOpen} onOpenChange={setAddDialogOpen} />
-      <UserDetailsDialog user={selectedUser} open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen} />
+      <AddUserDialog 
+        open={addDialogOpen} 
+        onOpenChange={setAddDialogOpen}
+        onUserAdded={fetchUsers}
+      />
+      
+      <UserDetailsDialog 
+        user={selectedUser} 
+        open={detailsDialogOpen} 
+        onOpenChange={setDetailsDialogOpen} 
+      />
     </div>
   )
 }

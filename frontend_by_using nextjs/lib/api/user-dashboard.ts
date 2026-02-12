@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+import api from "../axios";
 
 export interface DashboardData {
   currentStay: any | null;
@@ -9,42 +9,91 @@ export interface DashboardData {
 }
 
 export const dashboardApi = {
-  getDashboardData: async (userId: string, token: string): Promise<DashboardData> => {
+  // ✅ REMOVED token parameter - axios interceptor handles it!
+  getDashboardData: async (userId: string): Promise<DashboardData> => {
     try {
-      // Fetch user's current reservations
-      const reservationsRes = await fetch(`${API_URL}/room-orders?user_id=${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
       
-      // Fetch available rooms
-      const roomsRes = await fetch(`${API_URL}/rooms/available`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      
-      // Fetch active food orders
-      const ordersRes = await fetch(`${API_URL}/food-orders?user_id=${userId}&order_status=pending`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
+      // Fetch all data in parallel
+      const [reservationsRes, roomsRes, ordersRes] = await Promise.all([
+        api.get('/room-orders', {  
+          params: { user_id: userId }
+        }),
+        api.get('/rooms/available'),  // ✅ FIXED: /rooms/available not /rooms/
+        api.get('/food-orders', {
+          params: { 
+            user_id: userId,
+            order_status: 'pending'
+          }
+        })
+      ]);
 
-      const reservationsData = await reservationsRes.json();
-      const roomsData = await roomsRes.json();
-      const ordersData = await ordersRes.json();
+      // ❌ REMOVED - Don't set headers here, interceptor does it!
+      // if (token) {
+      //   api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      // }
 
-      // Get current stay (active reservation)
-      const currentStay = reservationsData.data?.find((res: any) => 
-        res.status === 'active' || (res.status === 'booked' && res.check_in <= new Date().toISOString().split('T')[0])
+      console.log('✅ Reservations:', reservationsRes.data);
+      console.log('✅ Rooms:', roomsRes.data);
+      console.log('✅ Orders:', ordersRes.data);
+
+      // Extract data from your response structure { success: true, data: [...] }
+      const reservations = reservationsRes.data?.data || [];
+      const availableRooms = roomsRes.data?.data || [];
+      const activeOrders = ordersRes.data?.data || [];
+
+      // Find current stay
+      const today = new Date().toISOString().split('T')[0];
+      const currentStay = reservations.find((res: any) => 
+        res.status === 'active' || 
+        (res.status === 'booked' && res.check_in <= today && res.check_out >= today)
       ) || null;
 
       return {
         currentStay,
-        activeOrders: ordersData.data?.length || 0,
-        availableRooms: roomsData.data?.length || 0,
-        loyaltyPoints: 1250, // This would come from a loyalty endpoint
-        recentActivities: [] // This would come from activities endpoint
+        activeOrders: activeOrders.length || 0,
+        availableRooms: availableRooms.length || 0,
+        loyaltyPoints: 1250, 
+        recentActivities: [] 
       };
+      
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error('❌ Error fetching dashboard data:', error);
       throw error;
     }
+  },
+
+  // Get user's reservations
+  getUserReservations: async (userId: string) => {
+    const response = await api.get('/room-orders', {
+      params: { user_id: userId }
+    });
+    return response.data?.data || [];
+  },
+
+  // Get available rooms
+  getAvailableRooms: async () => {
+    const response = await api.get('/rooms/available');
+    return response.data?.data || [];
+  },
+
+  // Get user's food orders
+  getUserFoodOrders: async (userId: string, status?: string) => {
+    const params: any = { user_id: userId };
+    if (status) params.order_status = status;
+    
+    const response = await api.get('/food-orders', { params });
+    return response.data?.data || [];
+  },
+
+  // Create reservation
+  createReservation: async (reservationData: any) => {
+    const response = await api.post('/room-orders', reservationData);
+    return response.data?.data || null;
+  },
+
+  // Create food order
+  createFoodOrder: async (orderData: any) => {
+    const response = await api.post('/food-orders', orderData);
+    return response.data?.data || null;
   }
 };

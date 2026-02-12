@@ -8,7 +8,6 @@ export interface SearchResult {
   link: string;
   timestamp?: string;
 }
-
 export const searchApi = {
   searchAll: async (query: string, userId: string, token: string): Promise<SearchResult[]> => {
     if (!query.trim()) return [];
@@ -49,7 +48,9 @@ export const searchApi = {
     }
   },
 
-  searchReservations: async (query: string, userId: string, token: string): Promise<SearchResult[]> => {
+
+  
+searchReservations: async (query: string, userId: string, token: string): Promise<SearchResult[]> => {
     try {
       const response = await fetch(`${API_URL}/room-orders?user_id=${userId}`, {
         headers: { 'Authorization': `Bearer ${token}` },

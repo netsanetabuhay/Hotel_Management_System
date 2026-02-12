@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from '@/components/ui/label'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import api from '@/lib/axios'
+import { useRouter } from 'next/navigation'  // ✅ Correct for App Router
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -21,43 +23,58 @@ export default function RegisterPage() {
     phone: ''
   })
   const [isLoading, setIsLoading] = useState(false)
-  const { register } = useAuth()
+ const router=useRouter()
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Validation
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Passwords do not match')
-      return
-    }
-    
-    if (formData.password.length < 6) {
-      toast.error('Password must be at least 6 characters')
-      return
-    }
-    
-    setIsLoading(true)
-    
-    try {
-      // Prepare data for backend (remove confirmPassword)
-      const { confirmPassword, ...registerData } = formData
-      
-      await register(registerData)
-      toast.success('Registration successful! Please login.')
-      
-      // Note: Navigation will be handled by the auth context
-    } catch (error: any) {
-      toast.error(error.message || 'Registration failed')
-    } finally {
-      setIsLoading(false)
-    }
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  
+  // Validation
+  if (formData.password !== formData.confirmPassword) {
+    toast.error('Passwords do not match')
+    return
   }
+  
+  if (formData.password.length < 5) {
+    toast.error('Password must be at least 5 characters')
+    return
+  }
+  
+  setIsLoading(true)
+  
+  try {
+    
+    const { confirmPassword, ...rest } = formData
+    
+    const registerData = {
+      username: rest.username,
+      email: rest.email,
+      password: rest.password,
+      first_name: rest.firstName || null,
+      last_name: rest.lastName || null,
+      phone: rest.phone || null
+    }
+    
+    // Make API request
+    const response = await api.post('/users/register', registerData)
+    
+    if (response.data.success) {
+      toast.success('Registration successful! Please login.')
+      // Redirect to login page
+      router.push('/login')
+    }
+    
+  } catch (error: any) {
+    console.error('Registration error:', error)
+    toast.error(error.message || error.response?.data?.message || 'Registration failed')
+  } finally {
+    setIsLoading(false)
+  }
+}
 
   return (
 <div className="min-h-screen flex items-center justify-center bg-blue-gradient-light">
@@ -74,7 +91,7 @@ export default function RegisterPage() {
               <Input
                 id="username"
                 name="username"
-                placeholder="johndoe"
+                placeholder="please enter unique username "
                 value={formData.username}
                 onChange={handleChange}
                 required
@@ -87,7 +104,7 @@ export default function RegisterPage() {
                 id="email"
                 name="email"
                 type="email"
-                placeholder="john@example.com"
+                placeholder="please enter your email"
                 value={formData.email}
                 onChange={handleChange}
                 required
@@ -101,7 +118,7 @@ export default function RegisterPage() {
                   id="password"
                   name="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="please enter your password"
                   value={formData.password}
                   onChange={handleChange}
                   required
@@ -114,7 +131,7 @@ export default function RegisterPage() {
                   id="confirmPassword"
                   name="confirmPassword"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="please enter your password"
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required
@@ -125,22 +142,22 @@ export default function RegisterPage() {
             {/* Optional Fields */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName">First Name (Optional)</Label>
+                <Label htmlFor="firstName">First Name </Label>
                 <Input
                   id="firstName"
                   name="firstName"
-                  placeholder="John"
+                  placeholder="Optional"
                   value={formData.firstName}
                   onChange={handleChange}
                 />
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="lastName">Last Name (Optional)</Label>
+                <Label htmlFor="lastName">Last Name </Label>
                 <Input
                   id="lastName"
                   name="lastName"
-                  placeholder="Doe"
+                  placeholder="Optional"
                   value={formData.lastName}
                   onChange={handleChange}
                 />
@@ -148,12 +165,12 @@ export default function RegisterPage() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone (Optional)</Label>
+              <Label htmlFor="phone">Phone </Label>
               <Input
                 id="phone"
                 name="phone"
                 type="tel"
-                placeholder="+1 (555) 123-4567"
+                placeholder="Optional"
                 value={formData.phone}
                 onChange={handleChange}
               />

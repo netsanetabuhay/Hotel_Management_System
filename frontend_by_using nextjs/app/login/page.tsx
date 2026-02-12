@@ -1,4 +1,3 @@
-// app/login/page.tsx
 'use client'
 
 import { useState } from 'react'
@@ -14,18 +13,18 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuth()
-
-  
+  const { login } = useAuth() // ✅ USE AUTH CONTEXT!
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     
     try {
-      await login(email, password)
-      // Navigation is handled in the auth context
+      await login(email, password) // ✅ USE AUTH CONTEXT LOGIN
+      toast.success('Login successful!')
+      // ✅ Redirect is handled in auth context
     } catch (error: any) {
+      console.error('Login error:', error)
       toast.error(error.message || 'Login failed')
     } finally {
       setIsLoading(false)
@@ -33,8 +32,8 @@ export default function LoginPage() {
   }
 
   return (
-<div className="min-h-screen flex items-center justify-center bg-blue-gradient-light">
-        <Card className="w-[350px]">
+    <div className="min-h-screen flex items-center justify-center bg-blue-gradient-light">
+      <Card className="w-[350px]">
         <CardHeader>
           <CardTitle>Login</CardTitle>
           <CardDescription>Enter your credentials to access the system</CardDescription>
@@ -46,7 +45,7 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="admin@example.com"
+                placeholder="please enter your email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -57,7 +56,7 @@ export default function LoginPage() {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="please enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
