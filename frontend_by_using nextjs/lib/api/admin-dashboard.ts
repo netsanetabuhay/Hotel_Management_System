@@ -61,7 +61,71 @@ export const adminApi = {
     return response.data?.data || null;
   },
 
-  // ============= ROOM MANAGEMENT =============
+
+//  FOOD ORDERS MANAGEMENT (ADMIN ONLY) 
+
+// ✅ Get all food orders with filters
+getFoodOrders: async (filters?: any) => {
+  try {
+    const response = await api.get('/food-orders', { params: filters });
+    // Your backend returns { success: true, message: "...", data: [...] }
+    return response.data?.data || [];
+  } catch (error) {
+    console.error('Error fetching food orders:', error);
+    return [];
+  }
+},
+
+// ✅ Get food order statistics
+getFoodOrderStats: async () => {
+  try {
+    const response = await api.get('/food-orders/stats/overview');
+    // Your backend returns { success: true, message: "...", data: {...} }
+    return response.data?.data || null;
+  } catch (error) {
+    console.error('Error fetching food order stats:', error);
+    return null;
+  }
+},
+
+// ✅ Update food order status (admin only)
+updateFoodOrderStatus: async (orderId: string, status: string) => {
+  try {
+    const response = await api.patch(`/food-orders/${orderId}`, { 
+      order_status: status 
+    });
+    return response.data?.data || null;
+  } catch (error) {
+    console.error('Error updating food order:', error);
+    throw error;
+  }
+},
+
+// ✅ Update food order payment status (admin only)
+updateFoodOrderPayment: async (orderId: string, paymentStatus: string) => {
+  try {
+    const response = await api.patch(`/food-orders/${orderId}`, { 
+      payment_status: paymentStatus 
+    });
+    return response.data?.data || null;
+  } catch (error) {
+    console.error('Error updating food order payment:', error);
+    throw error;
+  }
+},
+
+// ✅ Delete food order (admin only)
+deleteFoodOrder: async (orderId: string) => {
+  try {
+    const response = await api.delete(`/food-orders/${orderId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error deleting food order:', error);
+    throw error;
+  }
+},
+
+  //  ROOM MANAGEMENT 
   getAvailableRooms: async () => {
     const response = await api.get('/rooms/available');
     let rooms = response.data?.data || [];
@@ -215,37 +279,36 @@ getFoodItems: async (): Promise<FoodItem[]> => {
 },
 
 
-//get food orders
-getFoodOrders: async (filters?: any) => {
-  try {
-    const response = await api.get('/food-orders', { params: filters });
-    return response.data?.data || [];
-  } catch (error) {
-    console.error('Error fetching food orders:', error);
-    return [];
-  }
-},
+// //get food orders
+// getFoodOrders: async (filters?: any) => {
+//   try {
+//     const response = await api.get('/food-orders', { params: filters });
+//     return response.data?.data || [];
+//   } catch (error) {
+//     console.error('Error fetching food orders:', error);
+//     return [];
+//   }
+// },
+// //
+// getFoodOrderStats: async () => {
+//   try {
+//     const response = await api.get('/food-orders/stats/overview');
+//     return response.data?.data || null;
+//   } catch (error) {
+//     console.error('Error fetching food order stats:', error);
+//     return null;
+//   }
+// },
 
-//
-getFoodOrderStats: async () => {
-  try {
-    const response = await api.get('/food-orders/stats/overview');
-    return response.data?.data || null;
-  } catch (error) {
-    console.error('Error fetching food order stats:', error);
-    return null;
-  }
-},
-
-updateFoodOrderStatus: async (orderId: string, status: string) => {
-  try {
-    const response = await api.patch(`/food-orders/${orderId}`, { order_status: status });
-    return response.data?.data || null;
-  } catch (error) {
-    console.error('Error updating food order:', error);
-    throw error;
-  }
-},
+// updateFoodOrderStatus: async (orderId: string, status: string) => {
+//   try {
+//     const response = await api.patch(`/food-orders/${orderId}`, { order_status: status });
+//     return response.data?.data || null;
+//   } catch (error) {
+//     console.error('Error updating food order:', error);
+//     throw error;
+//   }
+// },
 
   // ✅ FIXED: Get food categories - matches your backend
  getFoodCategories: async (): Promise<string[]> => {
