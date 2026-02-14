@@ -40,7 +40,7 @@ export interface FoodItem {
 }
 
 export const adminApi = {
-  // ============= USER MANAGEMENT =============
+  //  USER MANAGEMENT 
   getUsers: async () => {
     const response = await api.get('/users');
     return response.data?.data || [];
@@ -231,35 +231,42 @@ deleteFoodOrder: async (orderId: string) => {
     return response.data?.data || null;
   },
 
-  // ============= RESERVATION MANAGEMENT =============
-  getReservations: async (filters?: any) => {
-    const response = await api.get('/room-orders', { params: filters });
-    return response.data?.data || [];
-  },
+ // ============= RESERVATION MANAGEMENT =============
+getReservations: async (filters?: any) => {
+  const response = await api.get('/room-orders', { params: filters });
+  return response.data?.data || [];
+},
 
-  createReservation: async (reservationData: any) => {
+// ✅ ADD THIS MISSING METHOD
+createReservation: async (reservationData: any) => {
+  try {
     const response = await api.post('/room-orders', reservationData);
     return response.data?.data || null;
-  },
+  } catch (error) {
+    console.error('Error creating reservation:', error);
+    throw error;
+  }
+},
 
-  updateReservation: async (reservationId: string, data: any) => {
-    const response = await api.patch(`/room-orders/${reservationId}`, data);
-    return response.data?.data || null;
-  },
+updateReservation: async (reservationId: string, data: any) => {
+  const response = await api.patch(`/room-orders/${reservationId}`, data);
+  return response.data?.data || null;
+},
 
-  deleteReservation: async (reservationId: string) => {
-    const response = await api.delete(`/room-orders/${reservationId}`);
-    return response.data;
-  },
+deleteReservation: async (reservationId: string) => {
+  const response = await api.delete(`/room-orders/${reservationId}`);
+  return response.data;
+},
 
-  getReservationStats: async () => {
-    const response = await api.get('/room-orders/stats/overview');
-    return response.data?.data || null;
-  },
+getReservationStats: async () => {
+  const response = await api.get('/room-orders/stats/overview');
+  return response.data?.data || null;
+},
 
-  // ============= FOOD MANAGEMENT =============
-  // ✅ FIXED: Get all food items - matches your backend
-  // ============= FOOD MANAGEMENT =============
+ 
+  //  FOOD MANAGEMENT
+  
+  
 getFoodItems: async (): Promise<FoodItem[]> => {
   try {
     const response = await api.get('/food-items');
@@ -277,39 +284,6 @@ getFoodItems: async (): Promise<FoodItem[]> => {
     return [];
   }
 },
-
-
-// //get food orders
-// getFoodOrders: async (filters?: any) => {
-//   try {
-//     const response = await api.get('/food-orders', { params: filters });
-//     return response.data?.data || [];
-//   } catch (error) {
-//     console.error('Error fetching food orders:', error);
-//     return [];
-//   }
-// },
-// //
-// getFoodOrderStats: async () => {
-//   try {
-//     const response = await api.get('/food-orders/stats/overview');
-//     return response.data?.data || null;
-//   } catch (error) {
-//     console.error('Error fetching food order stats:', error);
-//     return null;
-//   }
-// },
-
-// updateFoodOrderStatus: async (orderId: string, status: string) => {
-//   try {
-//     const response = await api.patch(`/food-orders/${orderId}`, { order_status: status });
-//     return response.data?.data || null;
-//   } catch (error) {
-//     console.error('Error updating food order:', error);
-//     throw error;
-//   }
-// },
-
   // ✅ FIXED: Get food categories - matches your backend
  getFoodCategories: async (): Promise<string[]> => {
   try {
@@ -470,12 +444,12 @@ getFoodItems: async (): Promise<FoodItem[]> => {
     }
   },
 
-  // ============= PENDING ORDERS =============
+  //  PENDING ORDERS 
   getPendingOrders: async () => {
     return []
   },
 
-  // ============= REVENUE & ANALYTICS =============
+  //  REVENUE & ANALYTICS 
   getRevenueData: async (period: 'week' | 'month' | 'year' = 'week') => {
     return []
   }

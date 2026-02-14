@@ -77,7 +77,17 @@ export default function AdminDashboardPage() {
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
+    useEffect(() => {
+  const interval = setInterval(() => {
+    if (user?.role === 'admin') {
+      fetchDashboardStats()
+    }
+  }, 30000) 
+
+  return () => clearInterval(interval)
+}, [user])
   }
+  
 
   return (
     <div className="space-y-6 p-6">

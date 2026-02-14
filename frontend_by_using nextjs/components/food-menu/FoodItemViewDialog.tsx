@@ -48,14 +48,15 @@ export function FoodItemViewDialog({
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl">{item.name}</DialogTitle>
-          <DialogDescription className="flex items-center gap-2">
+          {/* ✅ FIXED: Changed DialogDescription to div to prevent div inside p error */}
+          <div className="text-sm text-muted-foreground flex items-center gap-2">
             <FoodCategoryBadge category={item.category} />
             {additionalInfo.isPopular && (
               <Badge variant="secondary" className="bg-amber-100 text-amber-700">
                 🔥 Popular
               </Badge>
             )}
-          </DialogDescription>
+          </div>
           <DialogClose className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
             <span className="sr-only">Close</span>
           </DialogClose>

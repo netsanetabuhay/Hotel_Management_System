@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation"
 import { adminApi } from "@/lib/api/admin-dashboard"
 
 export default function UserDashboardPage() {
-  const { user, token } = useAuth()
+  const { user } = useAuth() // ✅ REMOVED token - axios handles it!
   const router = useRouter()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -26,19 +26,21 @@ export default function UserDashboardPage() {
   })
 
   useEffect(() => {
-    if (user && token) {
+    if (user) { // ✅ REMOVED token check
       fetchDashboardData()
     }
-  }, [user, token])
+  }, [user]) // ✅ REMOVED token dependency
 
   const fetchDashboardData = async () => {
-    if (!user || !token) return
+    if (!user) return // ✅ REMOVED token check
 
     setIsLoading(true)
     try {
-      const data = await dashboardApi.getDashboardData(user.user_id, token)
+      // ✅ REMOVED token parameter
+      const data = await dashboardApi.getDashboardData(user.user_id)
       
-      const rooms = await adminApi.getRooms(token)
+      // ✅ REMOVED token parameter
+      const rooms = await adminApi.getRooms()
       const availableRooms = rooms.filter((room: any) => 
         room.status === 'available' || room.current_status === 'available'
       ).length
@@ -58,6 +60,16 @@ export default function UserDashboardPage() {
       setIsLoading(false)
     }
   }
+  useEffect(() => {
+  const handleFocus = () => {
+    if (user) {
+      fetchDashboardData()
+    }
+  }
+
+  window.addEventListener('focus', handleFocus)
+  return () => window.removeEventListener('focus', handleFocus)
+}, [user])
 
   if (isLoading) {
     return (
