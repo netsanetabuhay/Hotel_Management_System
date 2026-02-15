@@ -30,6 +30,8 @@ export interface Room {
   floor?: string
   capacity?: number
   amenities?: string[]
+  bed_config?: string
+  bed_display?: string
 }
 
 export default function RoomsPage() {
@@ -45,6 +47,7 @@ export default function RoomsPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
+  const [bedConfigFilter, setBedConfigFilter] = useState<string>("all")
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [roomToEdit, setRoomToEdit] = useState<Room | null>(null)
@@ -57,23 +60,67 @@ export default function RoomsPage() {
     fetchRooms()
   }, [])
 
+  const getBedConfig = (roomType: string, capacity: number): { value: string, display: string } => {
+    const type = roomType?.toLowerCase() || '';
+    const cap = capacity || 2;
+    
+    // Single type configurations
+    if (type === 'single') {
+      if (cap === 1) return { value: "single_one", display: "1 Person" };
+      if (cap === 2) return { value: "single_two", display: "2 Persons" };
+    }
+    
+    // Double type configurations
+    if (type === 'double') {
+      if (cap === 2) return { value: "double_one", display: "Each 1 Person" };
+      if (cap === 4) return { value: "double_two", display: "Each 2 Persons" };
+      if (cap === 3) return { value: "double_mixed", display: "Mixed (1+2)" };
+    }
+    
+    // Triple type configurations
+    if (type === 'triple') {
+      if (cap === 3) return { value: "triple_one", display: "Each 1 Person" };
+      if (cap === 6) return { value: "triple_two", display: "Each 2 Persons" };
+      if (cap === 4 || cap === 5) return { value: "triple_mixed", display: "Mixed" };
+    }
+    
+    // Suite type configurations
+    if (type === 'suite') {
+      if (cap === 4) return { value: "family", display: "Family (2+2)" };
+      if (cap === 3) return { value: "suite", display: "King + Sofa" };
+    }
+    
+    // Default fallback based on capacity
+    if (cap === 1) return { value: "single_one", display: "1 Person" };
+    if (cap === 2) return { value: "double_one", display: "Each 1 Person" };
+    if (cap === 3) return { value: "triple_one", display: "Each 1 Person" };
+    if (cap === 4) return { value: "family", display: "Family (2+2)" };
+    
+    return { value: "double_one", display: "Each 1 Person" };
+  }
+
   const fetchRooms = async () => {
     try {
       setIsLoading(true)
       const data = await adminApi.getAvailableRooms()
       
-      const formattedRooms = data.map((room: any) => ({
-        room_id: room.room_id,
-        room_number: room.room_number,
-        room_type: room.room_type,
-        price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
-        image_url: room.image_url || null,
-        status: room.status || 'available',
-        current_status: room.current_status || room.status || 'available',
-        floor: room.floor || "1",
-        capacity: room.capacity || 2,
-        amenities: room.amenities || []
-      }))
+      const formattedRooms = data.map((room: any) => {
+        const bedConfig = getBedConfig(room.room_type, room.capacity);
+        return {
+          room_id: room.room_id,
+          room_number: room.room_number,
+          room_type: room.room_type,
+          price: typeof room.price === 'string' ? parseFloat(room.price) : room.price,
+          image_url: room.image_url || null,
+          status: room.status || 'available',
+          current_status: room.current_status || room.status || 'available',
+          floor: room.floor || "1",
+          capacity: room.capacity || 2,
+          amenities: room.amenities || [],
+          bed_config: bedConfig.value,
+          bed_display: bedConfig.display
+        };
+      });
       
       console.log('✅ Rooms loaded:', formattedRooms.length)
       setRooms(formattedRooms)
@@ -89,18 +136,74 @@ export default function RoomsPage() {
     }
   }
 
+  // Get available bed options based on selected room type
+  const getBedOptionsForType = () => {
+    if (typeFilter === "all") {
+      return [
+        { value: "all", label: "All Beds" },
+        { value: "single_one", label: "1 Person" },
+        { value: "single_two", label: "2 Persons" },
+        { value: "double_one", label: "Each 1 Person" },
+        { value: "double_two", label: "Each 2 Persons" },
+        { value: "double_mixed", label: "Mixed (1+2)" },
+        { value: "triple_one", label: "Each 1 Person" },
+        { value: "triple_two", label: "Each 2 Persons" },
+        { value: "triple_mixed", label: "Mixed" },
+        { value: "family", label: "Family (2+2)" },
+        { value: "suite", label: "King + Sofa" }
+      ];
+    }
+    
+    if (typeFilter === "single") {
+      return [
+        { value: "all", label: "All Single Beds" },
+        { value: "single_one", label: "1 Person" },
+        { value: "single_two", label: "2 Persons" }
+      ];
+    }
+    
+    if (typeFilter === "double") {
+      return [
+        { value: "all", label: "All Double Beds" },
+        { value: "double_one", label: "Each 1 Person" },
+        { value: "double_two", label: "Each 2 Persons" },
+        { value: "double_mixed", label: "Mixed (1+2)" }
+      ];
+    }
+    
+    if (typeFilter === "triple") {
+      return [
+        { value: "all", label: "All Triple Beds" },
+        { value: "triple_one", label: "Each 1 Person" },
+        { value: "triple_two", label: "Each 2 Persons" },
+        { value: "triple_mixed", label: "Mixed" }
+      ];
+    }
+    
+    if (typeFilter === "suite") {
+      return [
+        { value: "all", label: "All Suites" },
+        { value: "family", label: "Family (2+2)" },
+        { value: "suite", label: "King + Sofa" }
+      ];
+    }
+    
+    return [{ value: "all", label: "All Beds" }];
+  };
+
   const filteredRooms = rooms.filter((room) => {
     const matchesSearch = room.room_number.toLowerCase().includes(search.toLowerCase())
     const matchesType = typeFilter === "all" || room.room_type.toLowerCase() === typeFilter.toLowerCase()
+    const matchesBedConfig = bedConfigFilter === "all" || room.bed_config === bedConfigFilter
     
     if (isAdmin) {
       const matchesStatus = statusFilter === "all" || 
                            room.current_status === statusFilter || 
                            room.status === statusFilter
-      return matchesSearch && matchesStatus && matchesType
+      return matchesSearch && matchesStatus && matchesType && matchesBedConfig
     }
     
-    return matchesSearch && matchesType && room.current_status === 'available'
+    return matchesSearch && matchesType && matchesBedConfig && room.current_status === 'available'
   })
 
   const handleView = (room: Room) => {
@@ -120,14 +223,14 @@ export default function RoomsPage() {
       room_id: room?.room_id,
       room_number: room.room_number,
       room_type: room.room_type,
-      price: room.price
+      price: room.price,
+      bed_config: room.bed_config,
+      bed_display: room.bed_display
     })
     
-    // Store the COMPLETE room object
     setBookingRoom(room)
     setBookingModalOpen(true)
     
-    // Verify it was set
     setTimeout(() => {
       console.log('🔵 bookingRoom after set:', bookingRoom)
     }, 100)
@@ -235,6 +338,8 @@ export default function RoomsPage() {
     )
   }
 
+  const bedOptions = getBedOptionsForType();
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -256,8 +361,8 @@ export default function RoomsPage() {
       {/* Filters Card */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row gap-4 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by room number..."
@@ -284,18 +389,36 @@ export default function RoomsPage() {
               </Select>
             )}
             
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
+            {/* Room Type Filter - REMOVED Standard and Deluxe */}
+            <Select value={typeFilter} onValueChange={(value) => {
+              setTypeFilter(value);
+              setBedConfigFilter("all"); // Reset bed filter when type changes
+            }}>
               <SelectTrigger className="w-full sm:w-40">
                 <BedDouble className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Type" />
+                <SelectValue placeholder="Room Type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="deluxe">Deluxe</SelectItem>
-                <SelectItem value="standard">Standard</SelectItem>
-                <SelectItem value="suite">Suite</SelectItem>
                 <SelectItem value="single">Single</SelectItem>
                 <SelectItem value="double">Double</SelectItem>
+                <SelectItem value="triple">Triple</SelectItem>
+                <SelectItem value="suite">Suite</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Bed Configuration Filter - Dynamic based on selected type */}
+            <Select value={bedConfigFilter} onValueChange={setBedConfigFilter}>
+              <SelectTrigger className="w-full sm:w-48">
+                <BedDouble className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Bed Configuration" />
+              </SelectTrigger>
+              <SelectContent>
+                {bedOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -314,7 +437,7 @@ export default function RoomsPage() {
       ) : (
         <>
           {isAdmin ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2">
               {filteredRooms.map((room) => (
                 <RoomCard
                   key={room.room_id}
@@ -327,7 +450,9 @@ export default function RoomsPage() {
                     image: room.image_url || "/placeholder-room.jpg",
                     floor: room.floor || "1",
                     capacity: room.capacity || 2,
-                    amenities: room.amenities || []
+                    amenities: room.amenities || [],
+                    bed_config: room.bed_config,
+                    bed_display: room.bed_display
                   }}
                   onView={() => handleView(room)}
                   onEdit={() => handleEdit(room)}
@@ -348,7 +473,9 @@ export default function RoomsPage() {
                 image: room.image_url || "/placeholder-room.jpg",
                 floor: room.floor || "1",
                 capacity: room.capacity || 2,
-                amenities: room.amenities || []
+                amenities: room.amenities || [],
+                bed_config: room.bed_config,
+                bed_display: room.bed_display
               }))}
               onViewRoom={handleView}
               onBookRoom={handleBook}
@@ -398,7 +525,8 @@ export default function RoomsPage() {
           capacity: bookingRoom.capacity || 2,
           amenities: bookingRoom.amenities || [],
           floor: bookingRoom.floor || "1",
-          description: `Room ${bookingRoom.room_number} - ${bookingRoom.room_type}`
+          bed_display: bookingRoom.bed_display,
+          description: `${bookingRoom.room_type} Room - ${bookingRoom.bed_display || ''}`
         } : null}
         open={bookingModalOpen}
         onOpenChange={handleBookingModalClose}

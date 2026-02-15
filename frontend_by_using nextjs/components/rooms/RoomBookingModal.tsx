@@ -30,6 +30,7 @@ interface RoomBookingModalProps {
     amenities?: string[]
     floor?: string
     description?: string
+    bed_display?: string  // Added bed_display
   } | null
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -137,7 +138,7 @@ export function RoomBookingModal({
     try {
       setIsLoading(true)
       
-      // ✅ Format dates to YYYY-MM-DD for backend
+      // Format dates to YYYY-MM-DD for backend
       const formattedCheckIn = new Date(checkIn).toISOString().split('T')[0]
       const formattedCheckOut = new Date(checkOut).toISOString().split('T')[0]
       
@@ -229,6 +230,12 @@ export function RoomBookingModal({
                 <div>
                   <h3 className="text-xl font-semibold">Room {room.number}</h3>
                   <p className="text-sm text-muted-foreground capitalize">{room.type}</p>
+                  {/* Display bed configuration */}
+                  {room.bed_display && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Bed: {room.bed_display}
+                    </p>
+                  )}
                 </div>
                 <Badge className="bg-primary/10 text-primary text-lg px-3 py-1">
                   ${room.price}

@@ -60,14 +60,13 @@ export default function FoodMenuPage() {
   // Handle click outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      // Only for non-admin users and when a category is selected
       if (!isAdmin && categoryFilter !== 'all' && pageRef.current) {
-        // Check if click is outside any food card
         const target = event.target as HTMLElement
-        const isClickOnCard = target.closest('.group') // Cards have 'group' class
+        const isClickOnCard = target.closest('.group')
+        const isClickOnDialog = target.closest('[role="dialog"]')
+        const isClickOnButton = target.closest('button')
         
-        if (!isClickOnCard) {
-          // Clicked outside any card - show all categories
+        if (!isClickOnCard && !isClickOnDialog && !isClickOnButton) {
           handleShowAll()
         }
       }
@@ -174,18 +173,20 @@ export default function FoodMenuPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const handleCategoryClick = (category: string) => {
-    setCategoryFilter(category)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  }
-
   const handleShowAll = () => {
     setCategoryFilter('all')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const handleConfirmOrder = async (orderData: { order_place: string; quantity: number }) => {
-    if (!itemToOrder || !user) return
+    if (!itemToOrder || !user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to place an order",
+        variant: "destructive"
+      })
+      return
+    }
 
     setIsSubmittingOrder(true)
     try {
@@ -199,7 +200,11 @@ export default function FoodMenuPage() {
         ]
       }
 
-      await dashboardApi.createFoodOrder(orderPayload)
+      console.log('Placing order with payload:', orderPayload)
+      
+      const response = await dashboardApi.createFoodOrder(orderPayload)
+      
+      console.log('Order response:', response)
       
       toast({
         title: "Success!",
@@ -208,13 +213,15 @@ export default function FoodMenuPage() {
 
       setOrderDialogOpen(false)
       setItemToOrder(null)
+      
+      // Redirect to food orders page
       router.push('/dashboard/food-orders')
       
     } catch (error: any) {
       console.error('Error placing order:', error)
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to place order",
+        description: error.response?.data?.message || "Failed to place order. Please try again.",
         variant: "destructive"
       })
     } finally {
@@ -279,7 +286,6 @@ export default function FoodMenuPage() {
       ) : (
         <>
           {isAdmin ? (
-            /* Admin View - Keep existing grid */
             <FoodMenuGrid
               items={filteredItems}
               onView={(item) => handleViewDetails(item)}
@@ -288,7 +294,6 @@ export default function FoodMenuPage() {
               isAdmin={isAdmin}
             />
           ) : (
-            /* User View - Enhanced grid with new structure */
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {filteredItems.map((item) => (
                 <EnhancedFoodMenuCard

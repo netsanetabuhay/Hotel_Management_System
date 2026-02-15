@@ -11,9 +11,9 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { Minus, Plus, ShoppingBag, CreditCard, MapPin } from "lucide-react"
+import { Minus, Plus, ShoppingBag, MapPin } from "lucide-react"
 import { FoodPriceBadge } from "./FoodPriceBadge"
 import type { FoodItem } from "./FoodMenuCard"
 
@@ -21,9 +21,11 @@ interface OrderNowDialogProps {
   item: FoodItem | null
   open: boolean
   onOpenChange: (open: boolean) => void
-  onConfirm: (orderData: { order_place: string; quantity: number }) => void
+  onConfirm: (orderData: { order_place: string; quantity: number; delivery_fee?: number }) => Promise<void>
   isSubmitting?: boolean
 }
+
+const DELIVERY_RATE_PER_KM = 10 // $10 per km
 
 export function OrderNowDialog({
   item,
@@ -32,19 +34,36 @@ export function OrderNowDialog({
   onConfirm,
   isSubmitting = false
 }: OrderNowDialogProps) {
-  const [quantity, setQuantity] = useState(1)
+  const [quantity, setQuantity] = useState<number | string>("")
   const [orderPlace, setOrderPlace] = useState("take away")
-  const [customPlace, setCustomPlace] = useState("")
-  const [showCustomInput, setShowCustomInput] = useState(false)
+  const [showDeliveryInputs, setShowDeliveryInputs] = useState(false)
+  const [deliveryLocation, setDeliveryLocation] = useState("")
+  const [deliveryDistance, setDeliveryDistance] = useState<number | string>("")
+
+  // Reset state when dialog opens with new item
+  React.useEffect(() => {
+    if (open && item) {
+      setQuantity("")
+      setOrderPlace("take away")
+      setShowDeliveryInputs(false)
+      setDeliveryLocation("")
+      setDeliveryDistance("")
+    }
+  }, [open, item])
 
   if (!item) return null
 
-  // Convert price to number if it's string
   const itemPrice = typeof item.price === 'string' ? parseFloat(item.price) : item.price
-  const totalPrice = itemPrice * quantity
+  const numericQuantity = typeof quantity === 'string' ? (quantity === "" ? 0 : parseInt(quantity) || 0) : quantity
+  const numericDistance = typeof deliveryDistance === 'string' ? (deliveryDistance === "" ? 0 : parseFloat(deliveryDistance) || 0) : deliveryDistance
+  
+  const deliveryFee = showDeliveryInputs ? numericDistance * DELIVERY_RATE_PER_KM : 0
+  const subtotal = itemPrice * numericQuantity
+  const totalPrice = subtotal + deliveryFee
 
   const handleQuantityChange = (delta: number) => {
-    const newQuantity = quantity + delta
+    const currentQty = typeof quantity === 'string' ? (quantity === "" ? 0 : parseInt(quantity) || 0) : quantity
+    const newQuantity = currentQty + delta
     if (newQuantity >= 1 && newQuantity <= 20) {
       setQuantity(newQuantity)
     }
@@ -52,9 +71,8 @@ export function OrderNowDialog({
 
   const handleQuantityInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
-    // Allow empty input for editing
     if (value === "") {
-      setQuantity(0)
+      setQuantity("")
       return
     }
     const numValue = parseInt(value)
@@ -64,49 +82,56 @@ export function OrderNowDialog({
   }
 
   const handleQuantityBlur = () => {
-    if (quantity === 0 || quantity < 1) {
-      setQuantity(1)
+    if (quantity === "" || (typeof quantity === 'number' && quantity < 1)) {
+      setQuantity("")
     }
   }
 
   const handlePlaceChange = (value: string) => {
-    if (value === "custom") {
-      setShowCustomInput(true)
-      setOrderPlace("")
-    } else {
-      setShowCustomInput(false)
-      setOrderPlace(value)
-      setCustomPlace("")
+    setOrderPlace(value)
+    setShowDeliveryInputs(value === "delivery")
+    if (value !== "delivery") {
+      setDeliveryLocation("")
+      setDeliveryDistance("")
     }
   }
 
-  const handleConfirm = () => {
-    const finalPlace = showCustomInput && customPlace.trim() 
-      ? customPlace.trim() 
-      : orderPlace
-    onConfirm({
-      order_place: finalPlace,
-      quantity
+  const handleConfirm = async () => {
+    if (quantity === "" || numericQuantity < 1) return
+    
+    let finalOrderPlace = orderPlace
+    if (orderPlace === "delivery") {
+      finalOrderPlace = `delivery to ${deliveryLocation || 'address not provided'} (${numericDistance}km)`
+    }
+    
+    await onConfirm({
+      order_place: finalOrderPlace,
+      quantity: numericQuantity,
+      ...(orderPlace === "delivery" && { delivery_fee: deliveryFee })
     })
   }
 
+  const isQuantityValid = quantity !== "" && numericQuantity >= 1 && numericQuantity <= 20
+  const isDeliveryValid = !showDeliveryInputs || (showDeliveryInputs && numericDistance > 0)
+  const isConfirmDisabled = isSubmitting || !isQuantityValid || !isDeliveryValid
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto bg-gray-900 text-white border-gray-700">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
+          <DialogTitle className="flex items-center gap-2 text-xl text-white">
             <ShoppingBag className="h-5 w-5 text-primary" />
             Order {item.name}
           </DialogTitle>
-          <DialogDescription>
-            Customize your order and place it now
+          <DialogDescription className="text-gray-400">
+            Please fill in the details below to place your order
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
           {/* Food Preview */}
-          <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/5 to-transparent rounded-lg border">
-            <div className="h-20 w-20 rounded-lg overflow-hidden bg-gray-100 shadow-sm">
+          <div className="flex items-center gap-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+            <div className="h-20 w-20 rounded-lg overflow-hidden bg-gray-700 shadow-sm flex-shrink-0">
               {item.image_url ? (
                 <img
                   src={item.image_url}
@@ -119,39 +144,41 @@ export function OrderNowDialog({
                 </div>
               )}
             </div>
-            <div className="flex-1">
-              <h4 className="font-semibold text-lg text-foreground">{item.name}</h4>
-              <p className="text-sm text-muted-foreground line-clamp-2 mb-1">
+            <div className="flex-1 min-w-0">
+              <h4 className="font-semibold text-lg text-white truncate">{item.name}</h4>
+              <p className="text-sm text-gray-400 line-clamp-2 mb-1">
                 {item.description || 'Delicious food item'}
               </p>
               <FoodPriceBadge price={itemPrice} />
             </div>
           </div>
 
-          {/* Quantity Selector - Editable input with + and - */}
+          {/* Quantity Selector */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Quantity</Label>
+            <Label className="text-sm font-medium text-gray-300">Enter quantity you want to order</Label>
             <div className="flex items-center gap-3">
               <Button
                 type="button"
                 variant="outline"
                 size="icon"
                 onClick={() => handleQuantityChange(-1)}
-                disabled={quantity <= 1}
-                className="h-10 w-10 hover:scale-105 transition-transform"
+                disabled={numericQuantity <= 1 || isSubmitting}
+                className="h-10 w-10 hover:scale-105 transition-transform flex-shrink-0 bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
+                aria-label="Decrease quantity"
               >
                 <Minus className="h-4 w-4" />
               </Button>
               <div className="flex-1">
                 <Input
                   type="number"
-                  value={quantity || ""}
+                  value={quantity}
                   onChange={handleQuantityInput}
                   onBlur={handleQuantityBlur}
                   min="1"
                   max="20"
-                  className="text-center font-medium"
-                  placeholder="1"
+                  disabled={isSubmitting}
+                  className="text-center font-medium bg-gray-800 border-gray-700 text-white placeholder-gray-500"
+                  placeholder="Enter quantity"
                 />
               </div>
               <Button
@@ -159,137 +186,127 @@ export function OrderNowDialog({
                 variant="outline"
                 size="icon"
                 onClick={() => handleQuantityChange(1)}
-                disabled={quantity >= 20}
-                className="h-10 w-10 hover:scale-105 transition-transform"
+                disabled={numericQuantity >= 20 || isSubmitting}
+                className="h-10 w-10 hover:scale-105 transition-transform flex-shrink-0 bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
+                aria-label="Increase quantity"
               >
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground text-right">
-              Max: 20 items
+            <p className="text-xs text-gray-400 text-right">
+              Minimum 1, Maximum 20 items
             </p>
           </div>
 
-          {/* Order Place - Select with custom option */}
+          {/* Order Place - Select dropdown */}
           <div className="space-y-2">
-            <Label className="text-sm font-medium">Order Place</Label>
-            <RadioGroup
-              value={showCustomInput ? "custom" : orderPlace}
+            <Label className="text-sm font-medium text-gray-300">Where would you like to receive your order?</Label>
+            <Select
+              value={orderPlace}
               onValueChange={handlePlaceChange}
-              className="grid grid-cols-2 gap-3"
+              disabled={isSubmitting}
             >
-              <div>
-                <RadioGroupItem
-                  value="take away"
-                  id="take-away"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="take-away"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all hover:scale-105"
-                >
-                  <ShoppingBag className="mb-2 h-5 w-5" />
-                  <span className="text-sm font-medium">Take Away</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem
-                  value="dine in"
-                  id="dine-in"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="dine-in"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all hover:scale-105"
-                >
-                  <CreditCard className="mb-2 h-5 w-5" />
-                  <span className="text-sm font-medium">Dine In</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem
-                  value="in room"
-                  id="in-room"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="in-room"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all hover:scale-105"
-                >
-                  <MapPin className="mb-2 h-5 w-5" />
-                  <span className="text-sm font-medium">In Room</span>
-                </Label>
-              </div>
-              <div>
-                <RadioGroupItem
-                  value="custom"
-                  id="custom"
-                  className="peer sr-only"
-                />
-                <Label
-                  htmlFor="custom"
-                  className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all hover:scale-105"
-                >
-                  <MapPin className="mb-2 h-5 w-5" />
-                  <span className="text-sm font-medium">Other</span>
-                </Label>
-              </div>
-            </RadioGroup>
-            
-            {/* Custom place input */}
-            {showCustomInput && (
-              <Input
-                placeholder="Enter delivery location..."
-                value={customPlace}
-                onChange={(e) => setCustomPlace(e.target.value)}
-                className="mt-2 transition-all focus:scale-105"
-                autoFocus
-              />
-            )}
+              <SelectTrigger className="w-full bg-gray-800 border-gray-700 text-white">
+                <MapPin className="h-4 w-4 mr-2 text-gray-400" />
+                <SelectValue placeholder="Select an option" />
+              </SelectTrigger>
+              <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                <SelectItem value="take away" className="text-white hover:bg-gray-700 focus:bg-gray-700">Take Away (Pick up yourself)</SelectItem>
+                <SelectItem value="in room" className="text-white hover:bg-gray-700 focus:bg-gray-700">In Room (Deliver to your room)</SelectItem>
+                <SelectItem value="in hotel" className="text-white hover:bg-gray-700 focus:bg-gray-700">In Hotel (Deliver within hotel)</SelectItem>
+                <SelectItem value="delivery" className="text-white hover:bg-gray-700 focus:bg-gray-700">Delivery (Deliver to external address)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
+          {/* Delivery Details - Show only when delivery is selected */}
+          {showDeliveryInputs && (
+            <div className="space-y-4 p-4 bg-gray-800 rounded-lg border border-gray-700 animate-in fade-in slide-in-from-top-2 duration-300">
+              <h4 className="font-medium text-sm text-white">Delivery Details</h4>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-gray-400">Enter address</Label>
+                  <Input
+                    placeholder="Enter address"
+                    value={deliveryLocation}
+                    onChange={(e) => setDeliveryLocation(e.target.value)}
+                    disabled={isSubmitting}
+                    className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-500"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-400">Enter distance (km)</Label>
+                  <Input
+                    type="number"
+                    min="0.1"
+                    step="0.1"
+                    placeholder="Enter distance"
+                    value={deliveryDistance}
+                    onChange={(e) => setDeliveryDistance(e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
+                    disabled={isSubmitting}
+                    className="mt-1 bg-gray-700 border-gray-600 text-white placeholder-gray-500"
+                  />
+                </div>
+                <p className="text-xs text-gray-400">
+                  ⚡ Delivery fee: ${DELIVERY_RATE_PER_KM} per kilometer
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Price Summary */}
-          <div className="bg-primary/5 rounded-lg p-4 space-y-2">
+          <div className="bg-gray-800 rounded-lg p-4 space-y-2">
+            <h4 className="font-medium text-sm text-white mb-2">Order Summary</h4>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Price per item:</span>
-              <span className="font-medium">${itemPrice.toFixed(2)}</span>
+              <span className="text-gray-400">Price per item:</span>
+              <span className="font-medium text-white">${itemPrice.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Quantity:</span>
-              <span className="font-medium">{quantity}</span>
+              <span className="text-gray-400">Quantity:</span>
+              <span className="font-medium text-white">{numericQuantity || 0}</span>
             </div>
-            <div className="border-t pt-2 mt-2 flex justify-between font-bold">
-              <span>Total:</span>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-400">Subtotal:</span>
+              <span className="font-medium text-white">${subtotal.toFixed(2)}</span>
+            </div>
+            {showDeliveryInputs && numericDistance > 0 && (
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Delivery fee ({numericDistance}km):</span>
+                <span className="font-medium text-white">+${deliveryFee.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="border-t border-gray-700 pt-2 mt-2 flex justify-between font-bold">
+              <span className="text-white">Total amount to pay:</span>
               <span className="text-lg text-primary">${totalPrice.toFixed(2)}</span>
             </div>
           </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="gap-2 sm:gap-0 sticky bottom-0 bg-gray-900 pt-2">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="hover:scale-105 transition-transform"
+            className="hover:scale-105 transition-transform bg-gray-800 border-gray-700 text-white hover:bg-gray-700"
           >
             Cancel
           </Button>
           <Button
             type="button"
             onClick={handleConfirm}
-            disabled={isSubmitting || (showCustomInput && !customPlace.trim())}
-            className="min-w-[120px] hover:scale-105 transition-transform bg-primary hover:bg-primary/80"
+            disabled={isConfirmDisabled}
+            className="min-w-[120px] hover:scale-105 transition-transform bg-primary hover:bg-primary/80 text-white"
           >
             {isSubmitting ? (
               <>
                 <span className="animate-spin mr-2">⏳</span>
-                Placing...
+                Placing order...
               </>
             ) : (
               <>
                 <ShoppingBag className="h-4 w-4 mr-2" />
-                Confirm Order
+                Place Order
               </>
             )}
           </Button>

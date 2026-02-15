@@ -1,4 +1,3 @@
-// UserRoomsGrid.tsx
 "use client"
 
 import React, { useState, useRef, useEffect } from "react"
@@ -16,6 +15,8 @@ export interface Room {
   floor?: string
   capacity?: number
   amenities?: string[]
+  bed_config?: string
+  bed_display?: string
 }
 
 interface UserRoomsGridProps {
@@ -30,22 +31,18 @@ export function UserRoomsGrid({ rooms, onViewRoom, onBookRoom }: UserRoomsGridPr
   const [filterType, setFilterType] = useState<string | null>(null)
   const gridRef = useRef<HTMLDivElement>(null)
   
-  // Filter rooms by type if filter is active
   const displayedRooms = filterType 
     ? rooms.filter(room => room.room_type.toLowerCase() === filterType.toLowerCase())
     : rooms
   
-  // Handle type click
   const handleTypeClick = (roomType: string) => {
     setFilterType(roomType)
   }
   
-  // Clear filter
   const handleShowAll = () => {
     setFilterType(null)
   }
 
-  // Handle click outside - clicks on empty space in grid area trigger Show All
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (filterType && gridRef.current && !gridRef.current.contains(event.target as Node)) {
@@ -75,7 +72,6 @@ export function UserRoomsGrid({ rooms, onViewRoom, onBookRoom }: UserRoomsGridPr
 
   return (
     <div className="space-y-6">
-      {/* Filter header - shows when type is selected */}
       {filterType && (
         <div className="flex items-center justify-between p-3 bg-accent/30 rounded-lg">
           <span className="text-sm text-muted-foreground">
@@ -84,10 +80,10 @@ export function UserRoomsGrid({ rooms, onViewRoom, onBookRoom }: UserRoomsGridPr
         </div>
       )}
       
-      {/* Rooms grid - exactly 3 per row */}
+      {/* CHANGED: from lg:grid-cols-3 to lg:grid-cols-2 for 2 columns */}
       <div 
         ref={gridRef}
-        className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
+        className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-2"
       >
         {displayedRooms.map((room) => (
           <UserRoomCard
@@ -106,7 +102,6 @@ export function UserRoomsGrid({ rooms, onViewRoom, onBookRoom }: UserRoomsGridPr
         ))}
       </div>
 
-      {/* Show All button at BOTTOM */}
       {filterType && (
         <div className="flex justify-center pt-4">
           <Button 
