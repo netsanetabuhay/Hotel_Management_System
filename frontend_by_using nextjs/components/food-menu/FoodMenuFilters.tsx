@@ -6,14 +6,13 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Badge } from "@/components/ui/badge"
 
 interface FoodMenuFiltersProps {
   search: string
   onSearchChange: (value: string) => void
   categoryFilter: string
   onCategoryFilterChange: (value: string) => void
-  categories: string[]  // This comes from your backend and includes ALL categories
+  categories: string[]
 }
 
 export function FoodMenuFilters({
@@ -26,25 +25,24 @@ export function FoodMenuFilters({
   const [showFilters, setShowFilters] = React.useState(false)
 
   const clearSearch = () => onSearchChange('')
-  const clearCategory = () => onCategoryFilterChange('all')
 
   return (
-    <Card>
-      <CardContent className="p-4 space-y-4">
+    <Card className="border shadow-sm">
+      <CardContent className="p-5">
         {/* Main Search Bar */}
         <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="relative flex-1 group">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
             <Input
               placeholder="Search by name or description..."
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              className="pl-10 pr-10"
+              className="pl-10 pr-10 border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all bg-white text-black"
             />
             {search && (
               <button
                 onClick={clearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground hover:scale-110 transition-all"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -53,16 +51,21 @@ export function FoodMenuFilters({
           
           <div className="flex gap-2">
             <Select value={categoryFilter} onValueChange={onCategoryFilterChange}>
-              <SelectTrigger className="w-full sm:w-48">
-                <Filter className="h-4 w-4 mr-2" />
+              <SelectTrigger className="w-full sm:w-48 border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary transition-all hover:border-primary bg-white text-black">
+                <Filter className="h-4 w-4 mr-2 text-gray-600" />
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
-              <SelectContent className="max-h-[300px]">
-                <SelectItem value="all">All Categories</SelectItem>
-                {/* ✅ This shows ALL categories from your database */}
+              <SelectContent className="max-h-[300px] bg-white border border-gray-200 shadow-lg">
+                <SelectItem value="all" className="hover:bg-blue-50 focus:bg-blue-50 cursor-pointer transition-colors text-black">
+                  <span className="text-black font-medium">All Categories</span>
+                </SelectItem>
                 {categories.map((category) => (
-                  <SelectItem key={category} value={category}>
-                    {category}
+                  <SelectItem 
+                    key={category} 
+                    value={category}
+                    className="hover:bg-blue-50 focus:bg-blue-50 cursor-pointer transition-colors text-black"
+                  >
+                    <span className="text-black">{category}</span>
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -72,35 +75,14 @@ export function FoodMenuFilters({
               variant="outline"
               size="icon"
               onClick={() => setShowFilters(!showFilters)}
-              className={showFilters ? 'bg-accent' : ''}
+              className={`hover:scale-105 transition-all border-gray-200 hover:border-primary bg-white ${
+                showFilters ? 'bg-primary/10 border-primary text-primary' : 'text-black'
+              }`}
             >
               <Filter className="h-4 w-4" />
             </Button>
           </div>
         </div>
-
-        {/* Active Filters Display */}
-        {(search || categoryFilter !== 'all') && (
-          <div className="flex flex-wrap gap-2 pt-2">
-            <span className="text-xs text-muted-foreground">Active filters:</span>
-            {search && (
-              <Badge variant="secondary" className="gap-1">
-                Search: "{search}"
-                <button onClick={clearSearch} className="ml-1 hover:text-foreground">
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )}
-            {categoryFilter !== 'all' && (
-              <Badge variant="secondary" className="gap-1">
-                Category: {categoryFilter}
-                <button onClick={clearCategory} className="ml-1 hover:text-foreground">
-                  <X className="h-3 w-3" />
-                </button>
-              </Badge>
-            )}
-          </div>
-        )}
       </CardContent>
     </Card>
   )

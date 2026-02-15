@@ -1,7 +1,7 @@
 "use client"
 
-import React from "react"
-import { Package, Calendar, Clock, Tag, DollarSign, Edit3 } from "lucide-react"
+import React, { useState, useEffect } from "react"
+import { Package, Calendar, Clock, Tag, DollarSign, Edit3, Utensils, Flame } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,12 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Card, CardContent } from "@/components/ui/card"
 import { FoodCategoryBadge } from "./FoodCategoryBadge"
 import { FoodPriceBadge } from "./FoodPriceBadge"
+import { adminApi } from "@/lib/api/admin-dashboard"
 import type { FoodItem } from "./FoodMenuCard"
+import { useRouter } from "next/navigation"
 
 interface FoodItemViewDialogProps {
   item: FoodItem | null
@@ -31,6 +34,50 @@ export function FoodItemViewDialog({
   onEdit,
   isAdmin = false
 }: FoodItemViewDialogProps) {
+  const router = useRouter()
+  const [similarItems, setSimilarItems] = useState<FoodItem[]>([])
+  const [isLoadingSimilar, setIsLoadingSimilar] = useState(false)
+
+  useEffect(() => {
+    if (item && open) {
+      fetchSimilarItems()
+    }
+  }, [item, open])
+
+  const fetchSimilarItems = async () => {
+    if (!item) return
+    
+    setIsLoadingSimilar(true)
+    try {
+      const allItems = await adminApi.getFoodItems()
+      // Get items with same category, excluding current item, limit to 3
+      const similar = allItems
+        .filter(f => f.category === item.category && f.food_id !== item.food_id)
+        .slice(0, 3)
+      setSimilarItems(similar)
+    } catch (error) {
+      console.error('Error fetching similar items:', error)
+    } finally {
+      setIsLoadingSimilar(false)
+    }
+  }
+
+  const handleItemClick = (clickedItem: FoodItem) => {
+    // Close current dialog and open new one with clicked item
+    onOpenChange(false)
+    // Small delay to allow dialog to close before opening new one
+    setTimeout(() => {
+      // This would need to be handled by parent component
+      // For now, we'll just navigate or refresh
+    }, 300)
+  }
+
+  const handleOrderNow = (orderItem: FoodItem) => {
+    onOpenChange(false)
+    // Navigate to food menu with order dialog open for this item
+    router.push(`/dashboard/food-menu?order=${orderItem.food_id}`)
+  }
+
   if (!item) return null
 
   // Mock additional data - in real app, fetch from backend
@@ -45,15 +92,15 @@ export function FoodItemViewDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-2xl">{item.name}</DialogTitle>
-          {/* ✅ FIXED: Changed DialogDescription to div to prevent div inside p error */}
           <div className="text-sm text-muted-foreground flex items-center gap-2">
             <FoodCategoryBadge category={item.category} />
             {additionalInfo.isPopular && (
               <Badge variant="secondary" className="bg-amber-100 text-amber-700">
-                🔥 Popular
+                <Flame className="h-3 w-3 mr-1" />
+                Popular
               </Badge>
             )}
           </div>
@@ -104,7 +151,7 @@ export function FoodItemViewDialog({
                 </div>
                 <div className="bg-accent/30 rounded-lg p-3">
                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <Tag className="h-3 w-3" />
+                    <Utensils className="h-3 w-3" />
                     <span className="text-xs">Calories</span>
                   </div>
                   <p className="font-medium text-sm">{additionalInfo.calories} kcal</p>
@@ -154,10 +201,53 @@ export function FoodItemViewDialog({
             </div>
           </div>
 
+          {/* Similar Items Section */}
+          {similarItems.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-foreground flex items-center gap-2">
+                <Tag className="h-4 w-4" />
+                More in {item.category}
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {similarItems.map((similar) => (
+                  <Card key={similar.food_id} className="overflow-hidden hover:shadow-lg transition-all group">
+                    <div className="aspect-video overflow-hidden bg-gray-100">
+                      {similar.image_url ? (
+                        <img
+                          src={similar.image_url}
+                          alt={similar.name}
+                          className="h-full w-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="h-full w-full flex items-center justify-center">
+                          <Package className="h-8 w-8 text-gray-300" />
+                        </div>
+                      )}
+                    </div>
+                    <CardContent className="p-3">
+                      <h4 className="font-medium text-sm line-clamp-1">{similar.name}</h4>
+                      <div className="flex items-center justify-between mt-2">
+                        <FoodPriceBadge price={similar.price} />
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          className="h-7 text-xs hover:scale-105 transition-transform"
+                          onClick={() => handleOrderNow(similar)}
+                        >
+                          Order
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Edit Button for Admin */}
           {isAdmin && onEdit && (
             <div className="flex justify-end pt-2">
-              <Button onClick={onEdit} className="gap-2">
+              <Button onClick={onEdit} className="gap-2 hover:scale-105 transition-transform">
                 <Edit3 className="h-4 w-4" />
                 Edit Food Item
               </Button>

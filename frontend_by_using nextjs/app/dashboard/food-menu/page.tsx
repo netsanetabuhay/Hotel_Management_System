@@ -1,24 +1,32 @@
 "use client"
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Plus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/lib/auth-context'
 import { useToast } from '@/hooks/use-toast'
 import { adminApi } from '@/lib/api/admin-dashboard'
+import { dashboardApi } from '@/lib/api/user-dashboard'
+import { useRouter } from 'next/navigation'
 
-// Import components
+// Import existing admin components
 import { FoodMenuStats } from '@/components/food-menu/FoodMenuStats'
 import { FoodMenuFilters } from '@/components/food-menu/FoodMenuFilters'
 import { FoodMenuGrid } from '@/components/food-menu/FoodMenuGrid'
 import { FoodItemDialog } from '@/components/food-menu/FoodItemDialog'
 import { FoodItemViewDialog } from '@/components/food-menu/FoodItemViewDialog'
 import { EmptyFoodMenu } from '@/components/food-menu/EmptyFoodMenu'
+
+// Import new user components
+import { EnhancedFoodMenuCard } from '@/components/food-menu/EnhancedFoodMenuCard'
+import { OrderNowDialog } from '@/components/food-menu/OrderNowDialog'
+
 import type { FoodItem } from '@/components/food-menu/FoodMenuCard'
 
 export default function FoodMenuPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const router = useRouter()
   const isAdmin = user?.role === 'admin'
   
   const [isLoading, setIsLoading] = useState(true)
@@ -29,17 +37,47 @@ export default function FoodMenuPage() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   
-  // Dialog states
+  // Dialog states for admin
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [viewDialogOpen, setViewDialogOpen] = useState(false)
   const [selectedItem, setSelectedItem] = useState<FoodItem | null>(null)
+  
+  // New dialog states for user ordering
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false)
+  const [itemToOrder, setItemToOrder] = useState<FoodItem | null>(null)
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState(false)
+
+  // Ref for detecting clicks outside
+  const pageRef = useRef<HTMLDivElement>(null)
 
   // Fetch data
   useEffect(() => {
     fetchFoodItems()
     fetchCategories()
   }, [])
+
+  // Handle click outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Only for non-admin users and when a category is selected
+      if (!isAdmin && categoryFilter !== 'all' && pageRef.current) {
+        // Check if click is outside any food card
+        const target = event.target as HTMLElement
+        const isClickOnCard = target.closest('.group') // Cards have 'group' class
+        
+        if (!isClickOnCard) {
+          // Clicked outside any card - show all categories
+          handleShowAll()
+        }
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isAdmin, categoryFilter])
 
   const fetchFoodItems = async () => {
     try {
@@ -75,7 +113,7 @@ export default function FoodMenuPage() {
     return matchesSearch && matchesCategory
   })
 
-  // Stats calculation
+  // Stats calculation (for admin only)
   const stats = {
     totalItems: foodItems.length,
     totalCategories: categories.length,
@@ -84,8 +122,8 @@ export default function FoodMenuPage() {
       : 0
   }
 
-  // Handlers
-  const handleView = (item: FoodItem) => {
+  // Admin Handlers
+  const handleViewDetails = (item: FoodItem) => {
     setSelectedItem(item)
     setViewDialogOpen(true)
   }
@@ -125,6 +163,65 @@ export default function FoodMenuPage() {
     fetchCategories()
   }
 
+  // User Handlers
+  const handleOrderNow = (item: FoodItem) => {
+    setItemToOrder(item)
+    setOrderDialogOpen(true)
+  }
+
+  const handleSeeMore = (category: string) => {
+    setCategoryFilter(category)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleCategoryClick = (category: string) => {
+    setCategoryFilter(category)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleShowAll = () => {
+    setCategoryFilter('all')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleConfirmOrder = async (orderData: { order_place: string; quantity: number }) => {
+    if (!itemToOrder || !user) return
+
+    setIsSubmittingOrder(true)
+    try {
+      const orderPayload = {
+        order_place: orderData.order_place,
+        items: [
+          {
+            food_id: itemToOrder.food_id,
+            quantity: orderData.quantity
+          }
+        ]
+      }
+
+      await dashboardApi.createFoodOrder(orderPayload)
+      
+      toast({
+        title: "Success!",
+        description: "Your order has been placed successfully",
+      })
+
+      setOrderDialogOpen(false)
+      setItemToOrder(null)
+      router.push('/dashboard/food-orders')
+      
+    } catch (error: any) {
+      console.error('Error placing order:', error)
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to place order",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmittingOrder(false)
+    }
+  }
+
   const hasFilters = search !== '' || categoryFilter !== 'all'
 
   if (isLoading) {
@@ -136,12 +233,14 @@ export default function FoodMenuPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div ref={pageRef} className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Food Menu</h1>
-          <p className="text-muted-foreground mt-1">Manage restaurant menu items</p>
+          <p className="text-muted-foreground mt-1">
+            {isAdmin ? 'Manage restaurant menu items' : 'Browse our delicious menu'}
+          </p>
         </div>
         {isAdmin && (
           <Button onClick={handleAddNew}>
@@ -151,15 +250,17 @@ export default function FoodMenuPage() {
         )}
       </div>
 
-      {/* Stats */}
-      <FoodMenuStats
-        totalItems={stats.totalItems}
-        totalCategories={stats.totalCategories}
-        averagePrice={stats.averagePrice}
-        isAdmin={isAdmin}
-      />
+      {/* Stats - Only for admin */}
+      {isAdmin && (
+        <FoodMenuStats
+          totalItems={stats.totalItems}
+          totalCategories={stats.totalCategories}
+          averagePrice={stats.averagePrice}
+          isAdmin={isAdmin}
+        />
+      )}
 
-      {/* Filters */}
+      {/* Filters - Same for both */}
       <FoodMenuFilters
         search={search}
         onSearchChange={setSearch}
@@ -176,16 +277,36 @@ export default function FoodMenuPage() {
           hasFilters={hasFilters}
         />
       ) : (
-        <FoodMenuGrid
-          items={filteredItems}
-          onView={handleView}
-          onEdit={isAdmin ? handleEdit : undefined}
-          onDelete={isAdmin ? handleDelete : undefined}
-          isAdmin={isAdmin}
-        />
+        <>
+          {isAdmin ? (
+            /* Admin View - Keep existing grid */
+            <FoodMenuGrid
+              items={filteredItems}
+              onView={(item) => handleViewDetails(item)}
+              onEdit={(item) => handleEdit(item)}
+              onDelete={(item) => handleDelete(item)}
+              isAdmin={isAdmin}
+            />
+          ) : (
+            /* User View - Enhanced grid with new structure */
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {filteredItems.map((item) => (
+                <EnhancedFoodMenuCard
+                  key={item.food_id}
+                  item={item}
+                  onViewDetails={() => handleViewDetails(item)}
+                  onOrderNow={() => handleOrderNow(item)}
+                  onSeeMore={() => handleSeeMore(item.category)}
+                  onShowAll={handleShowAll}
+                  showBackButton={categoryFilter !== 'all'}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
-      {/* Dialogs */}
+      {/* Admin Dialogs */}
       <FoodItemDialog
         open={addDialogOpen || editDialogOpen}
         onOpenChange={(open) => {
@@ -204,6 +325,20 @@ export default function FoodMenuPage() {
         item={selectedItem}
         open={viewDialogOpen}
         onOpenChange={setViewDialogOpen}
+        isAdmin={isAdmin}
+        onEdit={isAdmin && selectedItem ? () => {
+          setViewDialogOpen(false)
+          setEditDialogOpen(true)
+        } : undefined}
+      />
+
+      {/* User Order Dialog */}
+      <OrderNowDialog
+        item={itemToOrder}
+        open={orderDialogOpen}
+        onOpenChange={setOrderDialogOpen}
+        onConfirm={handleConfirmOrder}
+        isSubmitting={isSubmittingOrder}
       />
     </div>
   )

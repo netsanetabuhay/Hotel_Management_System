@@ -113,7 +113,7 @@ export function Sidebar() {
                 >
                   <Icon className="h-4 w-4 flex-shrink-0" />
                   <span className="truncate">{item.label}</span>
-                  {/* ❌ REMOVED - Admin badges no longer show */}
+                  {/* REMOVED - Admin badges no longer show */}
                 </Link>
               )
             })}
@@ -127,11 +127,11 @@ export function Sidebar() {
               <button className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-accent transition-colors">
                 <Avatar className="h-9 w-9 flex-shrink-0">
                   <AvatarFallback className="bg-primary/10 text-primary">
-                    {user.first_name?.[0] || user.username?.[0] || 'U'}
+                    {user.first_name?.[0] ||'User'}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="text-sm font-medium truncate">{user.first_name || user.username}</p>
+                  <p className="text-sm font-medium truncate">{user.first_name || 'user'}</p>
                   <p className="text-xs text-muted-foreground capitalize truncate">{user.role}</p>
                 </div>
               </button>
@@ -141,7 +141,7 @@ export function Sidebar() {
               <DropdownMenuSeparator />
               
               <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{user.first_name || user.username}</p>
+                <p className="text-sm font-medium">{user.first_name ||'User'}</p>
                 <p className="text-xs text-muted-foreground">{user.email}</p>
                 {user.phone && (
                   <p className="text-xs text-muted-foreground mt-1">{user.phone}</p>
